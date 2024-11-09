@@ -201,8 +201,8 @@ class PokemonBot:
             return False
         self.log_callback("Start playing my turn...")
 
-    if not is_first_turn:
-        self.add_energy_to_pokemon()
+        if not is_first_turn:
+            self.add_energy_to_pokemon()
 
         ## Check playable cards (main field or bench is empty)
         if 0 < len(self.hand_state) < 8:
