@@ -26,7 +26,11 @@ class PokemonBot:
         self.log_callback = log_callback
         self.running = False
         self.template_images = load_template_images("images")
-        self.card_images = load_all_cards("images/cards")
+        # create images/cards folder if not exists
+        images_cards_folder = "images/cards"
+        if not os.path.exists(images_cards_folder):
+            os.makedirs(images_cards_folder)
+        self.card_images = load_all_cards(images_cards_folder)
         self.deck_info = deck_info
         self.card_data_manager = CardDataManager()
         self.ui_instance = ui_instance
@@ -121,7 +125,7 @@ class PokemonBot:
             ### BATTLE START
             self.image_processor.check_and_click_until_found(
                 self.template_images["TIME_LIMIT_INDICATOR"],
-                'Time limit indicator',  # noqa
+                "Time limit indicator",  # noqa
                 self.running,
                 self.stop,
             )
@@ -143,23 +147,17 @@ class PokemonBot:
                     self.check_n_cards()
                     self.reset_view()
                     if self.number_of_cards:
+                        self.log_callback(
+                            f"Number of cards on the first turn: {self.number_of_cards}"
+                        )
                         self.check_cards(True)
+                        self.log_callback("Hand state on first turn:")
                         for card in self.hand_state:
-                            card_offset_x = card_offset_mapping.get(
-                                self.number_of_cards, 20
-                            )
-                            start_x = self.card_start_x - (
-                                card["position"] * card_offset_x
-                            )
-                            if (
-                                card["info"]["level"] == 0
-                                and not card["info"]["item_card"]
-                            ):
-                                drag_position(
-                                    (start_x, self.card_y),
-                                    (self.center_x, self.center_y),
-                                )
-                                self.active_pokemon.append(card)
+                            self.log_callback(f"{card['name']}")
+                        self.play_turn(is_first_turn=True)
+                        self.end_turn()
+                    time.sleep(1)
+
                 elif (
                     self.battle_actions.check_turn(self.turn_check_region, self.running)
                     and self.active_pokemon
@@ -169,7 +167,7 @@ class PokemonBot:
                     if self.number_of_cards and self.battle_actions.check_turn(
                         self.turn_check_region, self.running
                     ):
-                        self.play_turn()
+                        self.play_turn(is_first_turn=False)
                         self.try_attack()
                         self.end_turn()
                     time.sleep(1)
@@ -198,18 +196,36 @@ class PokemonBot:
                 screenshot, self.template_images["CROSS_BUTTON"], "Cross button"
             )
 
-    def play_turn(self):
+    def play_turn(self, is_first_turn=False):
         if not self.running:
             return False
         self.log_callback("Start playing my turn...")
-        self.add_energy_to_pokemon()
-        
+
+        if not is_first_turn:
+            self.add_energy_to_pokemon()
+
         ## Check playable cards (main field or bench is empty)
-        if len(self.hand_state) > 0 and len(self.hand_state) < 8:
+        if 0 < len(self.hand_state) < 8:
+            self.log_callback("Hand state:")
+            for card in self.hand_state:
+                self.log_callback(f"{card['name']}")
+                self.log_callback(f"{card['info'].get('item_card')}")
+                start_x = self.card_start_x - (
+                    card["position"] * card_offset_mapping.get(self.number_of_cards, 20)
+                )
+                self.log_callback(f"Checking card in play turn: {card}")
+
             card_offset_x = card_offset_mapping.get(self.number_of_cards, 20)
             for card in self.hand_state:
-                ## Check if i can play a trainer card
-                if card["info"].get("item_card"):
+                ## Skip trainer cards on first turn
+                if is_first_turn and card["info"].get("item_card"):
+                    self.log_callback(
+                        f"Skipping trainer card {card['name']} on first turn"
+                    )
+                    continue
+
+                ## Check if i can play a trainer card (not on first turn)
+                if not is_first_turn and card["info"].get("item_card"):
                     start_x = self.card_start_x - (card["position"] * card_offset_x)
                     self.log_callback(f"Playing trainer card: {card['name']}...")
                     drag_position(
@@ -218,22 +234,33 @@ class PokemonBot:
                     time.sleep(1)
                     drag_position((500, 1250), (self.center_x, self.center_y))
                     break
+
                 if not self.running:
                     return False
                 self.log_callback(f"Hand cards: {self.hand_state}")
 
                 start_x = self.card_start_x - (card["position"] * card_offset_x)
+                if card["info"].get("item_card"):
+                    self.log_callback(f"🔹 Playing Trainer Card: **{card['name']}**")
+                    drag_position(
+                        (start_x, self.card_y), (self.center_x, self.center_y)
+                    )
+
                 if (
                     not self.active_pokemon
                     and card["info"]["level"] == 0
                     and not card["info"]["item_card"]
                 ):
+                    self.log_callback(f"🆕 Setting Active Pokémon: **{card['name']}**")
+                    self.reset_view()
+                    time.sleep(0.5)
                     drag_position(
                         (start_x, self.card_y), (self.center_x, self.center_y)
                     )
                     self.active_pokemon.append(card)
                     time.sleep(1)
-                    break
+                    self.log_callback("⚔️ **Battle Start!**")
+                    time.sleep(1)
                 elif len(self.bench_pokemon) < 3:
                     if (
                         card["info"]["level"] == 0
@@ -246,7 +273,11 @@ class PokemonBot:
                             self.log_callback(
                                 f"Playing card from position {card['position']+1} to bench {bench_position}..."
                             )
-                            drag_position((start_x, self.card_y), bench_position, 1.5)
+                            drag_position(
+                                (start_x, self.card_y),
+                                (bench_position[0], bench_position[1] - 100),
+                                1.25,
+                            )
 
                         bench_pokemon_info = {
                             "name": card["name"].capitalize(),
@@ -278,7 +309,7 @@ class PokemonBot:
                         }
                         time.sleep(1)
                         break
-
+                time.sleep(1)
                 if self.image_processor.check_and_click(
                     take_screenshot(),
                     self.template_images["START_BATTLE_BUTTON"],
@@ -327,7 +358,8 @@ class PokemonBot:
             "energies": min_energies,
             "evolves_from": card_data.get("prew_stage_name", None),
             "can_evolve": False,  # Will be updated when scanning deck
-            "item_card": card_data.get("type", "").lower() in ["item", "supporter"],
+            "item_card": card_data.get("type", "").lower() in ["item", "supporter"]
+            or card_data.get("stage", "").lower() in ["item", "supporter"],
             "id": card_data.get("id", None),
             "name": card_data.get("name", None),
             "number": card_data.get("number", None),
@@ -352,7 +384,7 @@ class PokemonBot:
                 break
             self.reset_view()
 
-            zoomed_card_image = self.battle_actions.get_card(x, self.card_y)
+            zoomed_card_image = self.battle_actions.get_card(x, self.card_y, 1.5)
             if debug_images:
                 debug_images_folder = "debug_images"
                 if not os.path.exists(debug_images_folder):
@@ -568,7 +600,7 @@ class PokemonBot:
         self.bench_pokemon = []
         for index, bench_position in enumerate(bench_positions):
             zoomed_card_image = self.battle_actions.get_card(
-                bench_position[0], bench_position[1], 1.25
+                bench_position[0], bench_position[1], 1.5
             )
             bench_zone_pokemon_name = self.battle_actions.identify_card(
                 zoomed_card_image
@@ -617,7 +649,7 @@ class PokemonBot:
                 "energies": 0,
             }
             self.active_pokemon.append(card_info)
-            self.log_callback(f"Active pokemon: {self.active_pokemon}")
+            self.log_callback(f"Active Pokémon: {main_zone_pokemon_name}")
         else:
             self.active_pokemon = []
 
@@ -637,13 +669,12 @@ class PokemonBot:
         if not self.running:
             return False
         self.try_attack()
-        self.click_bench_pokemons()
+        self.reset_view()
         self.check_n_cards()
         self.reset_view()
         if self.number_of_cards:
             self.check_cards(True)
-            self.reset_view()
-            self.check_field()
+            # self.check_field()
 
     def end_turn(self):
         if not self.running:
