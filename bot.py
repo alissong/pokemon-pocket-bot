@@ -26,7 +26,11 @@ class PokemonBot:
         self.log_callback = log_callback
         self.running = False
         self.template_images = load_template_images("images")
-        self.card_images = load_all_cards("images/cards")
+        # create images/cards folder if not exists
+        images_cards_folder = "images/cards"
+        if not os.path.exists(images_cards_folder):
+            os.makedirs(images_cards_folder)
+        self.card_images = load_all_cards(images_cards_folder)
         self.deck_info = deck_info
         self.card_data_manager = CardDataManager()
         self.ui_instance = ui_instance
@@ -150,7 +154,7 @@ class PokemonBot:
                         self.log_callback("Hand state on first turn:")
                         for card in self.hand_state:
                             self.log_callback(f"{card['name']}")
-                        self.play_turn()
+                        self.play_turn(is_first_turn=True)
                         self.end_turn()
                     time.sleep(1)
 
@@ -163,7 +167,7 @@ class PokemonBot:
                     if self.number_of_cards and self.battle_actions.check_turn(
                         self.turn_check_region, self.running
                     ):
-                        self.play_turn()
+                        self.play_turn(is_first_turn=False)
                         self.try_attack()
                         self.end_turn()
                     time.sleep(1)
@@ -192,10 +196,11 @@ class PokemonBot:
                 screenshot, self.template_images["CROSS_BUTTON"], "Cross button"
             )
 
-    def play_turn(self):
+    def play_turn(self, is_first_turn=False):
         if not self.running:
             return False
         self.log_callback("Start playing my turn...")
+
         self.add_energy_to_pokemon()
 
         ## Check playable cards (main field or bench is empty)
@@ -211,8 +216,15 @@ class PokemonBot:
 
             card_offset_x = card_offset_mapping.get(self.number_of_cards, 20)
             for card in self.hand_state:
-                ## Check if i can play a trainer card
-                if card["info"].get("item_card"):
+                ## Skip trainer cards on first turn
+                if is_first_turn and card["info"].get("item_card"):
+                    self.log_callback(
+                        f"Skipping trainer card {card['name']} on first turn"
+                    )
+                    continue
+
+                ## Check if i can play a trainer card (not on first turn)
+                if not is_first_turn and card["info"].get("item_card"):
                     start_x = self.card_start_x - (card["position"] * card_offset_x)
                     self.log_callback(f"Playing trainer card: {card['name']}...")
                     drag_position(
@@ -221,6 +233,7 @@ class PokemonBot:
                     time.sleep(1)
                     drag_position((500, 1250), (self.center_x, self.center_y))
                     break
+
                 if not self.running:
                     return False
                 self.log_callback(f"Hand cards: {self.hand_state}")
@@ -295,7 +308,7 @@ class PokemonBot:
                         }
                         time.sleep(1)
                         break
-
+                time.sleep(1)
                 if self.image_processor.check_and_click(
                     take_screenshot(),
                     self.template_images["START_BATTLE_BUTTON"],
