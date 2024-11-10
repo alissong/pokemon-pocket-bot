@@ -4,3 +4,4 @@ opencv_python==4.9.0.80
 opencv_python_headless==4.10.0.84
 tk
 ruff
+requests
