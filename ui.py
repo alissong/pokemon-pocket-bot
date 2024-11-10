@@ -1,13 +1,15 @@
 import tkinter as tk
 from tkinter import filedialog
-from config_manager import ConfigManager
+
+import cv2
+import numpy as np
+import requests
+from PIL import Image, ImageTk
+
+from adb_utils import take_screenshot
 from bot import PokemonBot
 from concede import PokemonConcedeBot
-from adb_utils import connect_to_emulator, take_screenshot
-from PIL import Image, ImageTk
-import requests
-import numpy as np
-import cv2
+from config_manager import ConfigManager
 
 
 class BotUI:

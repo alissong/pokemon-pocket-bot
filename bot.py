@@ -1,23 +1,25 @@
-import time
-import cv2
-import threading
-import numpy as np
-from adb_utils import (
-    connect_to_emulator,
-    click_position,
-    take_screenshot,
-    drag_position,
-)
-from loaders import load_template_images, load_all_cards
-import uuid
 import os
-from deck import deck_info, save_deck
-from card_data_manager import CardDataManager
-from image_utils import ImageProcessor
-from battle_actions import BattleActions
-from constants import default_pokemon_stats, bench_positions, card_offset_mapping
 import subprocess
+import threading
+import time
+import uuid
+
+import cv2
+import numpy as np
 import requests
+
+from adb_utils import (
+    click_position,
+    connect_to_emulator,
+    drag_position,
+    take_screenshot,
+)
+from battle_actions import BattleActions
+from card_data_manager import CardDataManager
+from constants import bench_positions, card_offset_mapping, default_pokemon_stats
+from deck import deck_info, save_deck
+from image_utils import ImageProcessor
+from loaders import load_all_cards, load_template_images
 
 
 class PokemonBot:
@@ -125,7 +127,7 @@ class PokemonBot:
             ### BATTLE START
             self.image_processor.check_and_click_until_found(
                 self.template_images["TIME_LIMIT_INDICATOR"],
-                "Time limit indicator",  # noqa
+                "Time limit indicator",
                 self.running,
                 self.stop,
             )
@@ -586,14 +588,14 @@ class PokemonBot:
         ):
             return False
 
-        self.log_callback(f"Click bench slots...")
+        self.log_callback("Click bench slots...")
         for bench_position in bench_positions:
             click_position(bench_position[0], bench_position[1])
 
     def check_field(self):
         if not self.running:
             return False
-        self.log_callback(f"Checking the field...")
+        self.log_callback("Checking the field...")
 
         self.check_active_pokemon()
         self.reset_view()

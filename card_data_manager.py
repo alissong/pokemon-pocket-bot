@@ -1,7 +1,8 @@
 # src/card_data_manager.py
-import requests
 import json
 import os
+
+import requests
 
 
 class CardDataManager:
@@ -14,7 +15,7 @@ class CardDataManager:
 
     def load_card_data(self):
         if os.path.exists(self.CACHE_FILE):
-            with open(self.CACHE_FILE, "r") as f:
+            with open(self.CACHE_FILE) as f:
                 self.card_data = json.load(f)
                 print(f"Number of cards loaded from cache: {len(self.card_data)}")
         else:

@@ -1,5 +1,6 @@
 import os
 
+
 class ConfigManager:
     def __init__(self, filename="configs.txt"):
         self.filename = filename
@@ -7,7 +8,7 @@ class ConfigManager:
     def load(self):
         config = {}
         if os.path.exists(self.filename):
-            with open(self.filename, "r") as f:
+            with open(self.filename) as f:
                 for line in f:
                     if " = " in line:
                         key, val = line.strip().split(" = ")

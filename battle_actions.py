@@ -1,6 +1,7 @@
-import time
 import os
-from adb_utils import long_press_position, find_subimage, take_screenshot
+import time
+
+from adb_utils import find_subimage, long_press_position, take_screenshot
 
 
 class BattleActions:
@@ -45,7 +46,7 @@ class BattleActions:
     def perform_search_battle_actions(self, running, stop, run_event=False):
         if not self.image_processor.check_and_click_until_found(
             self.template_images["VERSUS_SCREEN"],
-            'Versus Screen',
+            "Versus Screen",
             running,
             stop,
             max_attempts=10,
@@ -54,14 +55,14 @@ class BattleActions:
         if run_event:
             if not self.image_processor.check_and_click_until_found(
                 self.template_images["EVENT_MATCH_SCREEN"],
-                'Event Match Screen',
+                "Event Match Screen",
                 running,
                 stop,
                 max_attempts=10,
             ):
                 if not self.image_processor.check_and_click_until_found(
                     self.template_images["RANDOM_MATCH_SCREEN"],
-                    'Random Match Screen',
+                    "Random Match Screen",
                     running,
                     stop,
                     max_attempts=10,
@@ -70,7 +71,7 @@ class BattleActions:
         else:
             if not self.image_processor.check_and_click_until_found(
                 self.template_images["RANDOM_MATCH_SCREEN"],
-                'Random Match Screen',
+                "Random Match Screen",
                 running,
                 stop,
                 max_attempts=10,
@@ -78,7 +79,7 @@ class BattleActions:
                 return False
         if not self.image_processor.check_and_click_until_found(
             self.template_images["BATTLE_BUTTON"],
-            'Battle Button',
+            "Battle Button",
             running,
             stop,
             max_attempts=10,
@@ -86,7 +87,7 @@ class BattleActions:
             return False
 
     def check_rival_concede(self, screenshot, running, stop):
-        self.log_callback(f"Checking if the rival conceded...")
+        self.log_callback("Checking if the rival conceded...")
         if self.image_processor.check(
             screenshot, self.template_images["TAP_TO_PROCEED_BUTTON"], "Rival conceded"
         ):
@@ -103,11 +104,11 @@ class BattleActions:
                     break
             time.sleep(2)
             self.image_processor.check_and_click_until_found(
-                self.template_images["CROSS_BUTTON"], 'Cross button', running, stop
+                self.template_images["CROSS_BUTTON"], "Cross button", running, stop
             )
             time.sleep(4)
         else:
-            self.log_callback(f"Rival hasn't conceded")
+            self.log_callback("Rival hasn't conceded")
 
     def get_card(self, x, y, duration=1.0):
         x_zoom_card_region, y_zoom_card_region, w, h = self.zoom_card_region
@@ -130,7 +131,7 @@ class BattleActions:
         return identified_card
 
     def check_number_of_cards(self, card_x, card_y):
-        self.log_callback(f"Checking the number of cards...")
+        self.log_callback("Checking the number of cards...")
         long_press_position(card_x, card_y, 1.5)
 
         number_image = self.image_processor.capture_region(self.number_of_cards_region)

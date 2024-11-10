@@ -1,5 +1,7 @@
-import cv2
 import os
+
+import cv2
+
 
 def load_template_images(template_folder):
     template_images = {}
@@ -9,7 +11,7 @@ def load_template_images(template_folder):
         return template_images
 
     for filename in os.listdir(template_folder):
-        if filename.endswith(('.PNG')):
+        if filename.endswith(".PNG"):
             file_path = os.path.join(template_folder, filename)
             image = cv2.imread(file_path)
             if image is not None:
@@ -20,15 +22,17 @@ def load_template_images(template_folder):
                 print(f"Failed to load template: {file_path}")
 
     return template_images
+
+
 def load_all_cards(image_folder):
     card_images = {}
-    
+
     if not os.path.exists(image_folder):
         print(f"Directory {image_folder} does not exist.")
         return card_images
 
     for filename in os.listdir(image_folder):
-        if filename.endswith(('.png', '.jpg', '.jpeg')):
+        if filename.endswith((".png", ".jpg", ".jpeg")):
             file_path = os.path.join(image_folder, filename)
             image = cv2.imread(file_path)
             if image is not None:

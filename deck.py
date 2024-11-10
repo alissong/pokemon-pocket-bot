@@ -7,7 +7,7 @@ DECK_FILE = "deck.json"
 
 def load_deck():
     if os.path.exists(DECK_FILE):
-        with open(DECK_FILE, "r") as f:
+        with open(DECK_FILE) as f:
             return json.load(f)
     else:
         return {}
