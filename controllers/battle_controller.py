@@ -13,9 +13,10 @@ class BattleController:
 
     def check_turn(self, turn_check_region, running):
         is_your_turn = False
+        is_first_turn = False
         self.log_callback("Checking turn...")
         if not running:
-            return is_your_turn
+            return is_your_turn, is_first_turn
         screenshot1 = self.image_processor.capture_region(turn_check_region)
         time.sleep(1)
         screenshot2 = self.image_processor.capture_region(turn_check_region)
@@ -47,10 +48,11 @@ class BattleController:
             ):
                 self.log_callback("First turn")
                 is_your_turn = True
+                is_first_turn = True
             else:
                 self.log_callback("Waiting for opponent's turn...")
 
-        return is_your_turn
+        return is_your_turn, is_first_turn
 
     def perform_search_battle_actions(self, running, stop, run_event=False):
         if not self.image_processor.check_and_click_until_found(

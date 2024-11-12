@@ -98,30 +98,11 @@ class GameController:
             self.click_bench_pokemons()
             self.check_active_pokemon()
             self.reset_view()
-            print("inside handle battle")
 
-            # Check if it's the first turn
-            if self.image_processor.check(
-                screenshot,
-                self.template_images.get("GOING_FIRST_INDICATOR"),
-                "Going first log",
-                0.7,
-            ) or self.image_processor.check(
-                screenshot,
-                self.template_images.get("GOING_SECOND_INDICATOR"),
-                "Going second log",
-                0.7,
-            ):
-                print("inside going first or second")
-                self.game_state.is_first_turn = True
-                self.update_game_state()
-                self.play_turn()
-                self.end_turn()
-                self.game_state.is_first_turn = False
-            elif (
-                self.battle_controller.check_turn(self.turn_check_region, self.running)
-                and self.game_state.active_pokemon
-            ):
+            is_turn, self.game_state.is_first_turn = self.battle_controller.check_turn(
+                self.turn_check_region, self.running
+            )
+            if is_turn and self.game_state.active_pokemon:
                 self.update_game_state()
                 self.play_turn()
                 self.end_turn()
