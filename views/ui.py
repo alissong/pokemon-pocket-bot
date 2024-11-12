@@ -1,3 +1,5 @@
+# src/views/ui.py
+
 import tkinter as tk
 from tkinter import filedialog
 
@@ -5,11 +7,10 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image, ImageTk
+from utils.adb_utils import take_screenshot
+from utils.config_manager import ConfigManager
 
-from adb_utils import take_screenshot
 from bot import PokemonBot
-from concede import PokemonConcedeBot
-from config_manager import ConfigManager
 
 
 class BotUI:
@@ -19,9 +20,7 @@ class BotUI:
         self.root.title("Pokemon Pocket Bot")
         self.config_manager = ConfigManager()
         self.bot = PokemonBot(app_state, self.log_message, self)
-        self.concede = PokemonConcedeBot(app_state, self.log_message)
 
-        self.auto_concede_active = False
         self.bot_running = False
 
         self.card_name_event = None
@@ -69,17 +68,6 @@ class BotUI:
 
         action_frame = tk.Frame(self.root)
         action_frame.pack(pady=10)
-
-        self.auto_concede_button = tk.Button(
-            action_frame,
-            text="Auto Concede",
-            command=self.toggle_auto_concede,
-            width=20,
-            relief=tk.RAISED,
-            bd=3,
-            font=("Helvetica", 10),
-        )
-        self.auto_concede_button.pack(side=tk.LEFT, padx=5)
 
         self.screenshot_button = tk.Button(
             action_frame,
@@ -163,18 +151,6 @@ class BotUI:
             self.status_label.config(text="Status: Not running")
             self.log_message("Bot stopped.")
 
-    def toggle_auto_concede(self):
-        if not self.auto_concede_active:
-            self.auto_concede_active = True
-            self.auto_concede_button.config(text="Stop Auto Concede")
-            self.log_message("Auto Concede activated.")
-            self.concede.start()
-        else:
-            self.auto_concede_active = False
-            self.auto_concede_button.config(text="Auto Concede")
-            self.log_message("Auto Concede deactivated.")
-            self.concede.stop()
-
     def select_emulator_path(self):
         emulator_path = filedialog.askdirectory()
         if emulator_path:
@@ -196,14 +172,13 @@ class BotUI:
             and self.width_entry.get()
             and self.height_entry.get()
         ):
-            self.bot.capture_region(
-                (
-                    int(self.start_x_entry.get()),
-                    int(self.start_y_entry.get()),
-                    int(self.width_entry.get()),
-                    int(self.height_entry.get()),
-                )
+            region = (
+                int(self.start_x_entry.get()),
+                int(self.start_y_entry.get()),
+                int(self.width_entry.get()),
+                int(self.height_entry.get()),
             )
+            screenshot = self.bot.image_processor.capture_region(region)
             self.log_message("Region screenshot taken.")
 
     def request_card_name(self, image, event, error_message=None):
@@ -221,7 +196,7 @@ class BotUI:
         timeout_label.pack(pady=5)
 
         # Timeout counter
-        remaining_time = 10
+        remaining_time = 30
 
         def update_timeout():
             nonlocal remaining_time
@@ -336,7 +311,7 @@ class BotUI:
             card_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
 
             # Get and scale card image
-            image_url = self.bot.card_data_manager.get_card_image_url(card["id"])
+            image_url = self.bot.card_data_service.get_card_image_url(card["id"])
             response = requests.get(image_url)
             image_data = np.asarray(bytearray(response.content), dtype=np.uint8)
             api_card_image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)

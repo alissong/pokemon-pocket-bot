@@ -1,11 +1,12 @@
-# src/card_data_manager.py
+# src/services/card_data_service.py
+
 import json
 import os
 
 import requests
 
 
-class CardDataManager:
+class CardDataService:
     API_URL = "https://api.dotgg.gg/cgfw/getcards?game=pokepocket&mode=indexed"
     CACHE_FILE = "card_data_cache.json"
 
@@ -23,7 +24,7 @@ class CardDataManager:
 
     def fetch_and_cache_card_data(self):
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0",
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.9",
         }
@@ -38,11 +39,9 @@ class CardDataManager:
             print(f"Failed to fetch card data. Status code: {response.status_code}")
 
     def process_card_data(self, data):
-        names = data["names"]  # get column names
+        names = data["names"]
         for card_info in data["data"]:
-            card_dict = dict(
-                zip(names, card_info)
-            )  # create a dictionary with column names as keys
+            card_dict = dict(zip(names, card_info))
             card_id = card_dict["id"]
             self.card_data[card_id] = card_dict
 
@@ -50,11 +49,9 @@ class CardDataManager:
         if name is None:
             return []
         name = name.lower()
-        matches = []
-        for card in self.card_data.values():
-            if name in card["name"].lower():
-                matches.append(card)
-        return matches
+        return [
+            card for card in self.card_data.values() if name in card["name"].lower()
+        ]
 
     def get_card_by_id(self, _id):
         return self.card_data.get(_id, None)

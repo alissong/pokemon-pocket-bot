@@ -1,10 +1,11 @@
+# src/utils/image_utils.py
+
 import time
 
 import cv2
 import easyocr
 import numpy as np
-
-from adb_utils import click_position, find_subimage, take_screenshot
+from utils.adb_utils import click_position, find_subimage, take_screenshot
 
 
 class ImageProcessor:
@@ -21,15 +22,9 @@ class ImageProcessor:
     def extract_number_from_image(self, image):
         grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         reader = easyocr.Reader(["en"])
-
         result = reader.readtext(grayscale_image, detail=0)
-
         numbers = [text for text in result if text.isdigit()]
-
-        if numbers:
-            return numbers[0]
-        else:
-            return None
+        return numbers[0] if numbers else None
 
     def capture_region(self, region):
         x, y, w, h = region
@@ -66,7 +61,7 @@ class ImageProcessor:
             if similarity > similarity_threshold:
                 self.log_and_click(position, f"{log_message} found - {similarity:.2f}")
                 return True
-            elif similarity < similarity_threshold:
+            else:
                 attempts += 1
                 self.log_callback(
                     f"{log_message} not found. Attempt {attempts}/{max_attempts}."
@@ -92,3 +87,16 @@ class ImageProcessor:
     def log_and_click(self, position, message):
         self.log_callback(message)
         click_position(position[0], position[1])
+
+    def reset_view(self):
+        click_position(0, 1350)
+        click_position(0, 1350)
+
+    def get_card(self, x, y, duration=1.0):
+        x_zoom_card_region, y_zoom_card_region, w, h = (80, 255, 740, 1020)
+        from utils.adb_utils import long_press_position
+
+        return long_press_position(x, y, duration)[
+            y_zoom_card_region : y_zoom_card_region + h,
+            x_zoom_card_region : x_zoom_card_region + w,
+        ]
