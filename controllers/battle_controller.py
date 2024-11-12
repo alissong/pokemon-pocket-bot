@@ -11,7 +11,7 @@ class BattleController:
         self.template_images = template_images
         self.card_images = card_images
 
-    def check_turn(self, turn_check_region, running):
+    def check_turn(self, turn_check_region, running, game_state):
         is_your_turn = False
         is_first_turn = False
         self.log_callback("Checking turn...")
@@ -25,7 +25,7 @@ class BattleController:
         if similarity < 0.95:
             self.log_callback("It's your turn! Taking action...")
             is_your_turn = True
-        else:
+        if not game_state.first_turn_done:
             screenshot = take_screenshot()
             if (
                 self.image_processor.check_and_click(

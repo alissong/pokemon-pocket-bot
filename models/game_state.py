@@ -11,3 +11,4 @@ class GameState:
         self.bench_pokemon = []
         self.number_of_cards = None
         self.is_first_turn = True
+        self.first_turn_done = False

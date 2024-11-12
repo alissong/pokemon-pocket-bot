@@ -100,12 +100,26 @@ class GameController:
             self.reset_view()
 
             is_turn, self.game_state.is_first_turn = self.battle_controller.check_turn(
-                self.turn_check_region, self.running
+                self.turn_check_region, self.running, self.game_state
             )
             if is_turn and self.game_state.active_pokemon:
                 self.update_game_state()
                 self.play_turn()
                 self.end_turn()
+            elif is_turn:
+                self.update_game_state()
+                self.process_hand_cards()
+                time.sleep(1)
+                if self.game_state.is_first_turn:
+                    self.image_processor.check_and_click_until_found(
+                        self.template_images.get("START_BATTLE_BUTTON"),
+                        "Start battle button",
+                        self.running,
+                        self.stop,
+                        similarity_threshold=0.5,
+                        max_attempts=10,
+                    )
+                    self.game_state.first_turn_done = True
             else:
                 self.log_callback("Waiting for opponent's turn...")
                 time.sleep(1)
@@ -150,17 +164,6 @@ class GameController:
             self.add_energy_to_pokemon()
             self.try_attack()
 
-        # Check for START_BATTLE_BUTTON
-        if self.game_state.is_first_turn:
-            self.image_processor.check_and_click_until_found(
-                self.template_images.get("START_BATTLE_BUTTON"),
-                "Start battle button",
-                self.running,
-                self.stop,
-                similarity_threshold=0.5,
-                max_attempts=10,
-            )
-
     def process_hand_cards(self):
         card_offset_x = card_offset_mapping.get(self.game_state.number_of_cards, 20)
         for card in self.game_state.hand_state:
@@ -172,14 +175,24 @@ class GameController:
                 return
 
             start_x = self.card_start_x - (card["position"] * card_offset_x)
+            hand_changed = False
             if card["info"].get("item_card"):
                 self.play_trainer_card(card, start_x)
+                hand_changed = True
             elif self.can_set_active_pokemon(card):
                 self.set_active_pokemon(card, start_x)
+                hand_changed = True
             elif self.can_place_on_bench(card):
                 self.place_pokemon_on_bench(card, start_x)
+                hand_changed = True
             elif self.can_evolve_pokemon(card):
                 self.evolve_active_pokemon(card, start_x)
+                hand_changed = True
+            if hand_changed:
+                self.update_game_state()
+                card_offset_x = card_offset_mapping.get(
+                    self.game_state.number_of_cards, 20
+                )
             self.reset_view()
 
     def play_trainer_card(self, card, start_x):
@@ -199,12 +212,12 @@ class GameController:
     def set_active_pokemon(self, card, start_x):
         self.log_callback(f"Setting Active Pokémon: {card['name']}")
         self.reset_view()
-        time.sleep(0.5)
-        drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+        time.sleep(0.7)
+        drag_position((start_x, self.card_y), (self.center_x, self.center_y - 50))
+        ## TODO: Improve this, sometimes is failing maybe because of card_y (the most right card fails)
         self.game_state.active_pokemon.append(card)
         time.sleep(1)
         self.log_callback("Battle Start!")
-        time.sleep(1)
 
     def can_place_on_bench(self, card):
         return (
