@@ -14,6 +14,7 @@ class BattleController:
     def check_turn(self, turn_check_region, running, game_state):
         is_your_turn = False
         is_first_turn = False
+        go_first = False
         self.log_callback("Checking turn...")
         if not running:
             return is_your_turn, is_first_turn
@@ -27,18 +28,19 @@ class BattleController:
             is_your_turn = True
         if not game_state.first_turn_done:
             screenshot = take_screenshot()
+            go_first = self.image_processor.check(
+                screenshot,
+                self.template_images.get("GOING_FIRST_INDICATOR"),
+                "Going first log",
+                0.7,
+            )
             if (
                 self.image_processor.check_and_click(
                     screenshot,
                     self.template_images.get("START_BATTLE_BUTTON"),
                     "Start battle button",
                 )
-                or self.image_processor.check(
-                    screenshot,
-                    self.template_images.get("GOING_FIRST_INDICATOR"),
-                    "Going first log",
-                    0.7,
-                )
+                or go_first
                 or self.image_processor.check(
                     screenshot,
                     self.template_images.get("GOING_SECOND_INDICATOR"),
@@ -52,7 +54,7 @@ class BattleController:
             else:
                 self.log_callback("Waiting for opponent's turn...")
 
-        return is_your_turn, is_first_turn
+        return is_your_turn, is_first_turn, go_first
 
     def perform_search_battle_actions(self, running, stop, run_event=False):
         if not self.image_processor.check_and_click_until_found(

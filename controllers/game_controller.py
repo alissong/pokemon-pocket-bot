@@ -10,6 +10,12 @@ from utils.constants import (
     default_pokemon_stats,  # Add this import
 )
 
+card_effects = {
+    "professor's research": lambda hand_size: 2 + hand_size,  # Draw 2 (+2)
+    "poké ball": lambda hand_size: 1
+    + hand_size,  # Search and add one base Pokemon card (+1)
+}
+
 
 class GameController:
     def __init__(
@@ -38,7 +44,7 @@ class GameController:
         self.turn_check_region = (50, 1560, 200, 20)
         self.center_x = 400
         self.center_y = 900
-        self.card_start_x = 500
+        self.card_start_x = 510
         self.card_y = 1500
         self.number_of_cards_region = (790, 1325, 60, 50)
 
@@ -99,9 +105,12 @@ class GameController:
             self.check_active_pokemon()
             self.reset_view()
 
-            is_turn, self.game_state.is_first_turn = self.battle_controller.check_turn(
-                self.turn_check_region, self.running, self.game_state
+            is_turn, self.game_state.is_first_turn, self.game_state.go_first = (
+                self.battle_controller.check_turn(
+                    self.turn_check_region, self.running, self.game_state
+                )
             )
+            time.sleep(1)  # wait to draw the card if need
             if is_turn and self.game_state.active_pokemon:
                 self.update_game_state()
                 self.play_turn()
@@ -120,21 +129,18 @@ class GameController:
                         max_attempts=10,
                     )
                     self.game_state.first_turn_done = True
+            if self.game_state.go_first and self.game_state.first_turn_done:
+                self.game_state.go_first = False
+                self.log_callback("Played first!")
             else:
                 self.log_callback("Waiting for opponent's turn...")
                 time.sleep(1)
 
-    def process_turn(self, screenshot):
-        if self.is_battle_over(screenshot):
-            return
-
-        # This method is now integrated into handle_battle()
-
-    def update_game_state(self):
+    def update_game_state(self, cards_delta=0):
         self.reset_view()
-        self.check_number_of_cards()
+        self.check_number_of_cards(cards_delta)
         self.reset_view()
-        if self.game_state.number_of_cards:
+        if self.game_state.number_of_cards and self.game_state.number_of_cards > 0:
             self.card_recognition_service.check_cards(
                 self.game_state.number_of_cards,
                 self.card_start_x,
@@ -142,6 +148,8 @@ class GameController:
                 self.game_state.hand_state,
                 True,
             )
+        else:
+            self.game_state.hand_state = []
 
     def play_turn(self):
         if not self.running:
@@ -164,43 +172,81 @@ class GameController:
             self.add_energy_to_pokemon()
             self.try_attack()
 
-    def process_hand_cards(self):
+    def process_hand_cards(self, recursion_level=0):
+        # Prevent infinite recursion
+        if recursion_level >= 10:  # Safety limit
+            self.log_callback("Maximum card processing depth reached")
+            return
+
         card_offset_x = card_offset_mapping.get(self.game_state.number_of_cards, 20)
+        hand_changed = False
+
         for card in self.game_state.hand_state:
+            card_delta = 0
+
             if self.game_state.is_first_turn and card["info"].get("item_card"):
                 self.log_callback(f"Skipping trainer card {card['name']} on first turn")
+                continue
+
+            if (
+                card["info"].get("item_card")
+                and self.game_state.played_trainer_cards >= 2
+            ):
+                self.log_callback(
+                    f"Skipping trainer card {card['name']} because we already played 2"
+                )
                 continue
 
             if not self.running:
                 return
 
             start_x = self.card_start_x - (card["position"] * card_offset_x)
-            hand_changed = False
             if card["info"].get("item_card"):
-                self.play_trainer_card(card, start_x)
+                card_delta += self.play_trainer_card(card, start_x)
                 hand_changed = True
+                break
             elif self.can_set_active_pokemon(card):
+                card_delta -= 1  # Placing a Pokémon reduces hand size by 1
                 self.set_active_pokemon(card, start_x)
                 hand_changed = True
+                break
             elif self.can_place_on_bench(card):
+                card_delta -= 1  # Placing a Pokémon on bench reduces hand size by 1
                 self.place_pokemon_on_bench(card, start_x)
                 hand_changed = True
+                break
             elif self.can_evolve_pokemon(card):
+                card_delta -= 1  # Evolving a Pokémon reduces hand size by 1
                 self.evolve_active_pokemon(card, start_x)
                 hand_changed = True
-            if hand_changed:
-                self.update_game_state()
-                card_offset_x = card_offset_mapping.get(
-                    self.game_state.number_of_cards, 20
-                )
+                break
             self.reset_view()
+        if hand_changed:
+            self.reset_view()
+            self.update_game_state(cards_delta=card_delta)
+            # Only recurse if we still have cards to process
+            if (
+                self.game_state.hand_state
+            ):  ##TODO: maybe check turn again to prevent miss screenshots of the hand
+                self.process_hand_cards(recursion_level + 1)
+        self.game_state.played_trainer_cards = 0
 
     def play_trainer_card(self, card, start_x):
         self.log_callback(f"Playing trainer card: {card['name']}...")
-        drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+        card_name_lower = card["name"].lower()
+        # Default effect is we lose one card from hand (playing the card)
+        card_delta_effect = -1
+
+        # Check if card effect is in our mapping
+        effect_func = card_effects.get(card_name_lower)
+        if effect_func:
+            card_delta_effect = effect_func(self.game_state.number_of_cards)
+
         time.sleep(1)
-        drag_position((500, 1250), (self.center_x, self.center_y))
+        drag_position((start_x, self.card_y), (self.center_x, self.center_y))
         time.sleep(4)
+        self.game_state.played_trainer_cards += 1
+        return card_delta_effect
 
     def can_set_active_pokemon(self, card):
         return (
@@ -228,17 +274,22 @@ class GameController:
         )
 
     def place_pokemon_on_bench(self, card, start_x):
-        for bench_position in bench_positions:
-            self.reset_view()
-            time.sleep(1)
-            self.log_callback(
-                f"Placing card {card['name']} on bench at position {bench_position}..."
-            )
-            drag_position(
-                (start_x, self.card_y),
-                (bench_position[0], bench_position[1] - 100),
-                1.25,
-            )
+        # Find first empty bench position
+        if len(self.game_state.bench_pokemon) >= len(bench_positions):
+            return
+
+        bench_position = bench_positions[len(self.game_state.bench_pokemon)]
+        self.reset_view()
+        time.sleep(1)
+        self.log_callback(
+            f"Placing card {card['name']} on bench at position {bench_position}..."
+        )
+        drag_position(
+            (start_x, self.card_y),
+            (bench_position[0], bench_position[1] - 100),
+            1.25,
+        )
+
         bench_pokemon_info = {
             "name": card["name"].capitalize(),
             "info": card["info"],
@@ -252,6 +303,8 @@ class GameController:
             and self.game_state.active_pokemon
             and card["info"]["evolves_from"].lower()
             == self.game_state.active_pokemon[0]["name"].lower()
+            and self.game_state.first_turn_done
+            and not self.game_state.go_first
         )
 
     def evolve_active_pokemon(self, card, start_x):
@@ -359,7 +412,13 @@ class GameController:
             )
         )
 
-    def check_number_of_cards(self):
+    def check_number_of_cards(self, cards_delta=0):
+        if cards_delta != 0:
+            self.game_state.number_of_cards += cards_delta
+            self.log_callback(
+                f"Adjusted number of cards by delta: {cards_delta}, new total: {self.game_state.number_of_cards}"
+            )
+            return
         if not self.running:
             return
         self.game_state.number_of_cards = None

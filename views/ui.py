@@ -7,10 +7,10 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image, ImageTk
-from utils.adb_utils import take_screenshot
-from utils.config_manager import ConfigManager
 
 from bot import PokemonBot
+from utils.adb_utils import take_screenshot
+from utils.config_manager import ConfigManager
 
 
 class BotUI:
@@ -192,11 +192,11 @@ class BotUI:
         window.geometry("400x600")
 
         # Add timeout label
-        timeout_label = tk.Label(window, text="Time remaining: 30s", fg="red")
+        timeout_label = tk.Label(window, text="Time remaining: 12s", fg="red")
         timeout_label.pack(pady=5)
 
         # Timeout counter
-        remaining_time = 30
+        remaining_time = 12
 
         def update_timeout():
             nonlocal remaining_time
