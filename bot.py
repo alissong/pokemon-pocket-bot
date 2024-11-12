@@ -177,23 +177,33 @@ class PokemonBot:
                 screenshot = take_screenshot()
 
             ### GO TO MAIN SCREEN
-            time.sleep(1)
+            time.sleep(4)
             if self.image_processor.check_and_click(
                 screenshot, self.template_images["TAP_TO_PROCEED_BUTTON"], "Game ended"
-            ):
-                time.sleep(1)
-            if self.image_processor.check_and_click(
-                screenshot, self.template_images["TAP_TO_PROCEED_BUTTON"], "Game ended"
-            ):
-                time.sleep(1)
-            if self.image_processor.check_and_click(
-                screenshot, self.template_images["NEXT_BUTTON"], "Next button"
-            ):
-                time.sleep(1)
-            if self.image_processor.check_and_click(
-                screenshot, self.template_images["THANKS_BUTTON"], "Thanks button"
             ):
                 time.sleep(2)
+
+            # click_position(self.center_x, self.center_y)
+
+            max_attempts = 5
+            for _ in range(max_attempts):
+                screenshot = take_screenshot()
+                if self.image_processor.check_and_click(
+                    screenshot, self.template_images["NEXT_BUTTON"], "Next button"
+                ):
+                    time.sleep(2)
+                    break
+                time.sleep(1)
+
+            for _ in range(max_attempts):
+                screenshot = take_screenshot()
+                if self.image_processor.check_and_click(
+                    screenshot, self.template_images["THANKS_BUTTON"], "Thanks button"
+                ):
+                    time.sleep(3)
+                    break
+                time.sleep(1)
+
             self.image_processor.check_and_click(
                 screenshot, self.template_images["CROSS_BUTTON"], "Cross button"
             )
