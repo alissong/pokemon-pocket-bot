@@ -109,7 +109,7 @@ class GameController:
                     self.turn_check_region, self.running, self.game_state
                 )
             )
-            time.sleep(1)  # wait to draw the card if need
+            time.sleep(3)  # wait to draw the card if need
             if is_turn and self.game_state.active_pokemon:
                 self.update_game_state()
                 self.play_turn()
@@ -181,6 +181,8 @@ class GameController:
         hand_changed = False
 
         for card in self.game_state.hand_state:
+            if card in self.game_state.failed_cards:
+                continue
             card_delta = 0
 
             if self.game_state.is_first_turn and card["info"].get("item_card"):
@@ -202,6 +204,7 @@ class GameController:
             start_x = self.card_start_x - (card["position"] * card_offset_x)
             if card["info"].get("item_card"):
                 card_delta += self.play_trainer_card(card, start_x)
+                card_delta -= 1
                 hand_changed = True
                 break
             elif self.can_set_active_pokemon(card):
@@ -228,24 +231,66 @@ class GameController:
                 self.game_state.hand_state
             ):  ##TODO: maybe check turn again to prevent miss screenshots of the hand
                 self.process_hand_cards(recursion_level + 1)
-        self.game_state.played_trainer_cards = 0
+        if recursion_level == 0:
+            self.game_state.played_trainer_cards = 0
+            self.game_state.failed_cards = []
+
+    def verify_card_play(self, card, start_x, action_func):
+        """
+        Verifies if a card was successfully played.
+
+        Args:
+            card: The card being played
+            start_x: Starting x position for the card
+            action_func: Function that performs the actual card play action
+
+        Returns:
+            bool: True if card was successfully played, False otherwise
+        """
+        # Store the initial card state
+        initial_position = card["position"]
+        initial_card_id, _ = self.card_recognition_service.check_specific_card(
+            initial_position,
+            self.card_start_x,
+            self.card_y,
+            self.game_state.number_of_cards,
+        )
+
+        # Perform the card play action
+        action_func()
+        time.sleep(4)  # Wait for animation
+
+        # Verify the card was played by checking if it changed
+        new_card_id, _ = self.card_recognition_service.check_specific_card(
+            initial_position,
+            self.card_start_x,
+            self.card_y,
+            self.game_state.number_of_cards,
+        )
+
+        return new_card_id != initial_card_id
 
     def play_trainer_card(self, card, start_x):
         self.log_callback(f"Playing trainer card: {card['name']}...")
         card_name_lower = card["name"].lower()
-        # Default effect is we lose one card from hand (playing the card)
-        card_delta_effect = -1
 
-        # Check if card effect is in our mapping
-        effect_func = card_effects.get(card_name_lower)
-        if effect_func:
-            card_delta_effect = effect_func(self.game_state.number_of_cards)
+        # Define the card play action
+        def play_action():
+            time.sleep(1)
+            drag_position((start_x, self.card_y), (self.center_x, self.center_y))
 
-        time.sleep(1)
-        drag_position((start_x, self.card_y), (self.center_x, self.center_y))
-        time.sleep(4)
-        self.game_state.played_trainer_cards += 1
-        return card_delta_effect
+        # Attempt to play the card and verify success
+        if self.verify_card_play(card, start_x, play_action):
+            self.game_state.played_trainer_cards += 1
+            # Calculate card effect
+            effect_func = card_effects.get(card_name_lower)
+            if effect_func:
+                return effect_func(self.game_state.number_of_cards)
+            return 0  # Default effect: does nothing
+        self.game_state.failed_cards.append(card)
+
+        self.log_callback(f"Failed to play trainer card: {card['name']}")
+        return 0  # No change in hand size if card wasn't played
 
     def can_set_active_pokemon(self, card):
         return (
@@ -257,12 +302,18 @@ class GameController:
     def set_active_pokemon(self, card, start_x):
         self.log_callback(f"Setting Active Pokémon: {card['name']}")
         self.reset_view()
-        time.sleep(0.7)
-        drag_position((start_x, self.card_y), (self.center_x, self.center_y - 50))
-        ## TODO: Improve this, sometimes is failing maybe because of card_y (the most right card fails)
-        self.game_state.active_pokemon.append(card)
-        time.sleep(1)
-        self.log_callback("Battle Start!")
+
+        def play_action():
+            time.sleep(0.7)
+            drag_position((start_x, self.card_y), (self.center_x, self.center_y - 50))
+
+        if self.verify_card_play(card, start_x, play_action):
+            self.game_state.active_pokemon.append(card)
+            time.sleep(1)
+            self.log_callback("Battle Start!")
+        else:
+            self.log_callback(f"Failed to set active Pokémon: {card['name']}")
+            self.game_state.failed_cards.append(card)
 
     def can_place_on_bench(self, card):
         return (
@@ -273,28 +324,33 @@ class GameController:
         )
 
     def place_pokemon_on_bench(self, card, start_x):
-        # Find first empty bench position
         if len(self.game_state.bench_pokemon) >= len(bench_positions):
             return
 
         bench_position = bench_positions[len(self.game_state.bench_pokemon)]
         self.reset_view()
-        time.sleep(1)
-        self.log_callback(
-            f"Placing card {card['name']} on bench at position {bench_position}..."
-        )
-        drag_position(
-            (start_x, self.card_y),
-            (bench_position[0], bench_position[1] - 100),
-            1.25,
-        )
 
-        bench_pokemon_info = {
-            "name": card["name"].capitalize(),
-            "info": card["info"],
-            "energies": 0,
-        }
-        self.game_state.bench_pokemon.append(bench_pokemon_info)
+        def play_action():
+            time.sleep(1)
+            self.log_callback(
+                f"Placing card {card['name']} on bench at position {bench_position}..."
+            )
+            drag_position(
+                (start_x, self.card_y),
+                (bench_position[0], bench_position[1] - 100),
+                1.25,
+            )
+
+        if self.verify_card_play(card, start_x, play_action):
+            bench_pokemon_info = {
+                "name": card["name"].capitalize(),
+                "info": card["info"],
+                "energies": 0,
+            }
+            self.game_state.bench_pokemon.append(bench_pokemon_info)
+        else:
+            self.log_callback(f"Failed to place {card['name']} on bench")
+            self.game_state.failed_cards.append(card)
 
     def can_evolve_pokemon(self, card):
         return (
@@ -310,13 +366,20 @@ class GameController:
         self.log_callback(
             f"Evolving {self.game_state.active_pokemon[0]['name']} to {card['name']}..."
         )
-        drag_position((start_x, self.card_y), (self.center_x, self.center_y))
-        self.game_state.active_pokemon[0] = {
-            "name": card["name"],
-            "info": card["info"],
-            "energies": self.game_state.active_pokemon[0].get("energies", 0),
-        }
-        time.sleep(1)
+
+        def play_action():
+            drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+
+        if self.verify_card_play(card, start_x, play_action):
+            self.game_state.active_pokemon[0] = {
+                "name": card["name"],
+                "info": card["info"],
+                "energies": self.game_state.active_pokemon[0].get("energies", 0),
+            }
+            time.sleep(1)
+        else:
+            self.log_callback(f"Failed to evolve to {card['name']}")
+            self.game_state.failed_cards.append(card)
 
     def add_energy_to_pokemon(self):
         if not self.running:

@@ -184,3 +184,35 @@ class CardRecognitionService:
             os.makedirs(debug_images_folder)
         unique_id = str(uuid.uuid4())
         cv2.imwrite(f"{debug_images_folder}/{unique_id}.png", image)
+
+    def check_specific_card(self, position, card_start_x, card_y, number_of_cards):
+        """
+        Check a specific card position in the hand.
+        Returns (card_id, card_info) tuple if card is found, (None, None) otherwise.
+        """
+        self.image_processor.reset_view()
+
+        # Calculate x position based on card position and offset
+        offset = card_offset_mapping.get(number_of_cards, 20)
+        x = card_start_x - (position * offset)
+
+        # Get and analyze the card image
+        zoomed_card_image = self.image_processor.get_card(x, card_y, 1.5)
+        card_id = self.identify_card(zoomed_card_image)
+
+        if card_id is None:
+            return None, None
+
+        # Get card info from deck_info or card_data_service
+        selected_card = self.deck_info.get(card_id)
+        if not selected_card:
+            card_data = self.card_data_service.get_card_by_id(card_id)
+            if card_data:
+                selected_card = self.convert_api_card_data(card_data)
+                # Update deck_info with the new card info
+                self.deck_info[card_id] = selected_card
+                save_deck(self.deck_info)
+            else:
+                return None, None
+
+        return card_id, selected_card
