@@ -7,10 +7,10 @@ import uuid
 import cv2
 import numpy as np
 import requests
+
 from utils.adb_utils import find_subimage
 from utils.constants import card_offset_mapping
-
-from deck import deck_info, save_deck
+from utils.deck import deck_info, save_deck
 
 
 class CardRecognitionService:
