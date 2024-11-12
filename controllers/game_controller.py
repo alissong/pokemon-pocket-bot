@@ -208,20 +208,20 @@ class GameController:
                 hand_changed = True
                 break
             elif self.can_set_active_pokemon(card):
-                card_delta -= 1  # Placing a Pokémon reduces hand size by 1
-                self.set_active_pokemon(card, start_x)
-                hand_changed = True
-                break
+                if self.set_active_pokemon(card, start_x):
+                    hand_changed = True
+                    card_delta -= 1  # Placing a Pokémon reduces hand size by 1
+                    break
             elif self.can_place_on_bench(card):
-                card_delta -= 1  # Placing a Pokémon on bench reduces hand size by 1
-                self.place_pokemon_on_bench(card, start_x)
-                hand_changed = True
-                break
+                if self.place_pokemon_on_bench(card, start_x):
+                    hand_changed = True
+                    card_delta -= 1  # Placing a Pokémon on bench reduces hand size by 1
+                    break
             elif self.can_evolve_pokemon(card):
-                card_delta -= 1  # Evolving a Pokémon reduces hand size by 1
-                self.evolve_active_pokemon(card, start_x)
-                hand_changed = True
-                break
+                if self.evolve_active_pokemon(card, start_x):
+                    hand_changed = True
+                    card_delta -= 1  # Evolving a Pokémon reduces hand size by 1
+                    break
             self.reset_view()
         if hand_changed:
             self.reset_view()
@@ -311,9 +311,11 @@ class GameController:
             self.game_state.active_pokemon.append(card)
             time.sleep(1)
             self.log_callback("Battle Start!")
+            return True
         else:
             self.log_callback(f"Failed to set active Pokémon: {card['name']}")
             self.game_state.failed_cards.append(card)
+            return False
 
     def can_place_on_bench(self, card):
         return (
@@ -325,7 +327,7 @@ class GameController:
 
     def place_pokemon_on_bench(self, card, start_x):
         if len(self.game_state.bench_pokemon) >= len(bench_positions):
-            return
+            return False
 
         bench_position = bench_positions[len(self.game_state.bench_pokemon)]
         self.reset_view()
@@ -337,7 +339,7 @@ class GameController:
             )
             drag_position(
                 (start_x, self.card_y),
-                (bench_position[0], bench_position[1] - 100),
+                (bench_position[0], bench_position[1]),
                 1.25,
             )
 
@@ -348,9 +350,11 @@ class GameController:
                 "energies": 0,
             }
             self.game_state.bench_pokemon.append(bench_pokemon_info)
+            return True
         else:
             self.log_callback(f"Failed to place {card['name']} on bench")
             self.game_state.failed_cards.append(card)
+            return False
 
     def can_evolve_pokemon(self, card):
         return (
@@ -377,9 +381,11 @@ class GameController:
                 "energies": self.game_state.active_pokemon[0].get("energies", 0),
             }
             time.sleep(1)
+            return True
         else:
             self.log_callback(f"Failed to evolve to {card['name']}")
             self.game_state.failed_cards.append(card)
+            return False
 
     def add_energy_to_pokemon(self):
         if not self.running:
