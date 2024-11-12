@@ -203,10 +203,12 @@ class GameController:
 
             start_x = self.card_start_x - (card["position"] * card_offset_x)
             if card["info"].get("item_card"):
-                card_delta += self.play_trainer_card(card, start_x)
-                card_delta -= 1
-                hand_changed = True
-                break
+                played, this_card_delta = self.play_trainer_card(card, start_x)
+                if played:
+                    card_delta += this_card_delta
+                    card_delta -= 1
+                    hand_changed = True
+                    break
             elif self.can_set_active_pokemon(card):
                 if self.set_active_pokemon(card, start_x):
                     hand_changed = True
@@ -285,12 +287,12 @@ class GameController:
             # Calculate card effect
             effect_func = card_effects.get(card_name_lower)
             if effect_func:
-                return effect_func(self.game_state.number_of_cards)
-            return 0  # Default effect: does nothing
+                return True, effect_func(self.game_state.number_of_cards)
+            return True, 0  # Default effect: does nothing
         self.game_state.failed_cards.append(card)
 
         self.log_callback(f"Failed to play trainer card: {card['name']}")
-        return 0  # No change in hand size if card wasn't played
+        return False, 0  # No change in hand size if card wasn't played
 
     def can_set_active_pokemon(self, card):
         return (
