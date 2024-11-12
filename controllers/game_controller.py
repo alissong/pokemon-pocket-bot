@@ -11,9 +11,8 @@ from utils.constants import (
 )
 
 card_effects = {
-    "professor's research": lambda hand_size: 2 + hand_size,  # Draw 2 (+2)
-    "poké ball": lambda hand_size: 1
-    + hand_size,  # Search and add one base Pokemon card (+1)
+    "professor's research": lambda hand_size: 2,  # Draw 2 (+2)
+    "poké ball": lambda hand_size: 1,  # Search and add one base Pokemon card (+1)
 }
 
 

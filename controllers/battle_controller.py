@@ -57,6 +57,7 @@ class BattleController:
         return is_your_turn, is_first_turn, go_first
 
     def perform_search_battle_actions(self, running, stop, run_event=False):
+        time.sleep(1)
         if not self.image_processor.check_and_click_until_found(
             self.template_images.get("VERSUS_SCREEN"),
             "Versus Screen",
