@@ -346,12 +346,6 @@ class GameController:
             )
 
         if self.verify_card_play(card, start_x, play_action):
-            bench_pokemon_info = {
-                "name": card["name"].capitalize(),
-                "info": card["info"],
-                "energies": 0,
-            }
-            self.game_state.bench_pokemon.append(bench_pokemon_info)
             ##TODO: update bench state based on cards
             return True
         else:
