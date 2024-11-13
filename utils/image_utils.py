@@ -4,7 +4,7 @@ import time
 
 import cv2
 import easyocr
-import numpy as np
+from skimage.metrics import structural_similarity as ssim
 
 from utils.adb_utils import click_position, find_subimage, take_screenshot
 
@@ -32,7 +32,8 @@ class ImageProcessor:
             return 0
         img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
         img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-        return np.mean(img1_gray == img2_gray)
+        score, _ = ssim(img1_gray, img2_gray, full=True)
+        return score
 
     def extract_number_from_image(self, image):
         grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
