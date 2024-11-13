@@ -130,6 +130,12 @@ class DebugWindow:
         self.window.update()
         paned_window.sashpos(0, int(window_width * PANED_WINDOW_RATIO))
 
+        # Initialize correct image size after window creation
+        self.image_size = (
+            max(self.image_frame.winfo_width() - WINDOW_PADDING, 1),
+            max(self.image_frame.winfo_height() - WINDOW_PADDING, 1),
+        )
+
     def close_window(self):
         if self.window is not None:
             self.window.withdraw()
