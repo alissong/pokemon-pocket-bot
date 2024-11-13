@@ -27,6 +27,7 @@ class GameController:
         game_state,
         template_images,
         log_callback,
+        debug_window=None,
     ):
         self.app_state = app_state
         self.emulator_controller = emulator_controller
@@ -44,8 +45,10 @@ class GameController:
         self.center_x = 400
         self.center_y = 900
         self.card_start_x = 520
-        self.card_y = 1500
+        self.card_y = 1495
         self.number_of_cards_region = (790, 1325, 60, 50)
+        self.debug_window = debug_window
+        self.last_screenshot = None
 
     def start(self):
         if not self.app_state.program_path:
@@ -99,16 +102,22 @@ class GameController:
             if self.is_battle_over(screenshot) or self.next_step_available(screenshot):
                 break
 
-            # Handle situations like defeated Pokémon or special cards
-            self.click_bench_pokemons()
-            self.check_active_pokemon()
-            self.reset_view()
+            # Add check for rival concede
+            self.battle_controller.check_rival_concede(
+                screenshot, self.running, self.stop
+            )
 
             is_turn, self.game_state.is_first_turn, self.game_state.go_first = (
                 self.battle_controller.check_turn(
                     self.turn_check_region, self.running, self.game_state
                 )
             )
+            if not self.game_state.is_first_turn:
+                # Handle situations like defeated Pokémon or special cards
+                self.click_bench_pokemons()
+                self.check_active_pokemon()
+                self.reset_view()
+
             time.sleep(3)  # wait to draw the card if need
             if is_turn and self.game_state.active_pokemon:
                 self.update_game_state()
@@ -162,6 +171,17 @@ class GameController:
             self.log_callback("Hand state:")
             for card in self.game_state.hand_state:
                 self.log_callback(f"{card['name']}")
+
+            # Add bench state logging here
+            self.log_callback("\nBench state:")
+            for slot, pokemon in self.game_state.bench_pokemon.items():
+                if pokemon:
+                    self.log_callback(
+                        f"Slot {slot}: {pokemon['name']} (Energy: {pokemon['energies']})"
+                    )
+                else:
+                    self.log_callback(f"Slot {slot}: Empty")
+
             time.sleep(1)
             self.process_hand_cards()
             time.sleep(1)
@@ -279,7 +299,7 @@ class GameController:
         # Define the card play action
         def play_action():
             time.sleep(1)
-            drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+            self.drag((start_x, self.card_y), (self.center_x, self.center_y))
 
         # Attempt to play the card and verify success
         if self.verify_card_play(card, start_x, play_action):
@@ -307,7 +327,7 @@ class GameController:
 
         def play_action():
             time.sleep(0.7)
-            drag_position((start_x, self.card_y), (self.center_x, self.center_y - 50))
+            self.drag((start_x, self.card_y), (self.center_x, self.center_y - 50))
 
         if self.verify_card_play(card, start_x, play_action):
             self.game_state.active_pokemon.append(card)
@@ -352,10 +372,8 @@ class GameController:
             self.log_callback(
                 f"Placing card {card['name']} on bench at position {empty_slot}..."
             )
-            drag_position(
-                (start_x, self.card_y),
-                (bench_position[0], bench_position[1]),
-                1.25,
+            self.drag(
+                (start_x, self.card_y), (bench_position[0], bench_position[1]), 1.25
             )
 
         if self.verify_card_play(card, start_x, play_action):
@@ -409,7 +427,7 @@ class GameController:
                 bench_position = bench_positions[slot_idx]
 
                 def play_action():
-                    drag_position(
+                    self.drag(
                         (start_x, self.card_y), (bench_position[0], bench_position[1])
                     )
 
@@ -435,7 +453,7 @@ class GameController:
             )
 
             def play_action():
-                drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+                self.drag((start_x, self.card_y), (self.center_x, self.center_y))
 
             if self.verify_card_play(card, start_x, play_action):
                 self.game_state.active_pokemon[0] = {
@@ -455,20 +473,20 @@ class GameController:
     def add_energy_to_pokemon(self):
         if not self.running:
             return
-        drag_position((750, 1450), (self.center_x, self.center_y), 0.3)
+        self.drag((750, 1450), (self.center_x, self.center_y), 0.3)
 
     def try_attack(self):
         self.add_energy_to_pokemon()
-        drag_position((500, 1250), (self.center_x, self.center_y))
+        self.drag((500, 1250), (self.center_x, self.center_y))
         time.sleep(0.25)
         self.reset_view()
-        click_position(self.center_x, self.center_y)
+        self.click(self.center_x, self.center_y)
         time.sleep(1)
-        click_position(540, 1250)
-        click_position(540, 1150)
-        click_position(540, 1050)
+        self.click(540, 1250)
+        self.click(540, 1150)
+        self.click(540, 1050)
         time.sleep(1)
-        click_position(570, 1070)
+        self.click(570, 1070)
         self.reset_view()
 
     def end_turn(self):
@@ -560,15 +578,15 @@ class GameController:
             self.game_state.number_of_cards = int(n_cards)
 
     def reset_view(self):
-        click_position(0, 1350)
-        click_position(0, 1350)
+        self.click(0, 1350, include_debug=False)
+        self.click(0, 1350, include_debug=False)
 
     def click_bench_pokemons(self):
         if not self.running:
             return
         self.log_callback("Checking bench slots...")
         for slot_idx, bench_position in enumerate(bench_positions):
-            click_position(bench_position[0], bench_position[1])
+            self.click(bench_position[0], bench_position[1])
             zoomed_card_image = self.battle_controller.get_card(
                 bench_position[0], bench_position[1], 1.25
             )
@@ -589,11 +607,10 @@ class GameController:
                 self.log_callback(f"Bench Pokemon {slot_idx}: {card_info['name']}")
             else:
                 self.game_state.bench_pokemon[slot_idx] = None
-            time.sleep(0.55)
             self.reset_view()
 
     def check_active_pokemon(self):
-        drag_position((500, 1100), (self.center_x, self.center_y))
+        self.drag((500, 1100), (self.center_x, self.center_y))
         zoomed_card_image = self.battle_controller.get_card(
             self.center_x, self.center_y, 1.25
         )
@@ -614,3 +631,22 @@ class GameController:
             self.log_callback(f"Active Pokémon: {card_info['name']}")
         else:
             self.game_state.active_pokemon = []
+
+    def click(self, x, y, include_debug=True):
+        """Wrapper for click_position with default debug parameters"""
+        if include_debug:
+            click_position(
+                x, y, debug_window=self.debug_window, screenshot=self.last_screenshot
+            )
+        else:
+            click_position(x, y)
+
+    def drag(self, start_pos, end_pos, duration=0.5):
+        """Wrapper for drag_position with default debug parameters"""
+        drag_position(
+            start_pos,
+            end_pos,
+            duration,
+            debug_window=self.debug_window,
+            screenshot=self.last_screenshot,
+        )

@@ -101,6 +101,7 @@ class BattleController:
             return False
 
     def check_rival_concede(self, screenshot, running, stop):
+        ## TODO: check if need call to this function
         self.log_callback("Checking if the rival conceded...")
         if self.image_processor.check(
             screenshot,

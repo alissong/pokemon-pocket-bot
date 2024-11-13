@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 from bot import PokemonBot
 from utils.adb_utils import take_screenshot
 from utils.config_manager import ConfigManager
+from views.debug_window import DebugWindow
 
 
 class BotUI:
@@ -19,6 +20,7 @@ class BotUI:
         self.app_state = app_state
         self.root.title("Pokemon Pocket Bot")
         self.config_manager = ConfigManager()
+        self.debug_window = DebugWindow(root)
         self.bot = PokemonBot(app_state, self.log_message, self)
 
         self.bot_running = False
@@ -27,104 +29,205 @@ class BotUI:
         self.card_name = None
         self.selected_card = None
 
+        # Initialize entry variables
+        self.start_x_entry = None
+        self.start_y_entry = None
+        self.width_entry = None
+        self.height_entry = None
+
         self.setup_ui()
         self.load_configs()
 
     def setup_ui(self):
-        self.root.geometry("450x650")
+        # Configure root window
+        self.root.geometry("500x750")  # Slightly larger default size
+        self.root.configure(bg="#f0f0f0")  # Light gray background
+
+        # Create main container with padding
+        main_container = tk.Frame(self.root, bg="#f0f0f0")
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Make main_container expand vertically
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        # Header section
+        header_frame = tk.Frame(main_container, bg="#f0f0f0")
+        header_frame.pack(fill=tk.X, pady=(0, 15))
+
         tk.Label(
-            self.root, text="Pokemon Pocket Bot ⚔️", font=("Helvetica", 16, "bold")
+            header_frame,
+            text="Pokemon Pocket Bot ⚔️",
+            font=("Helvetica", 20, "bold"),
+            bg="#f0f0f0",
+            fg="#2C3E50",
         ).pack(pady=10)
 
-        select_path_frame = tk.Frame(self.root)
-        select_path_frame.pack(pady=5)
+        # Create sections with distinct grouping
+        # Path Selection Section
+        path_frame = self.create_section_frame(main_container, "Emulator Configuration")
 
         self.select_path_button = tk.Button(
-            select_path_frame,
+            path_frame,
             text="Select Emulator Path",
             command=self.select_emulator_path,
             font=("Helvetica", 10),
+            bg="#4CAF50",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
         )
         self.select_path_button.pack(side=tk.LEFT, padx=5)
 
         self.selected_emulator_label = tk.Label(
-            select_path_frame, text="", font=("Helvetica", 10)
+            path_frame,
+            text="",
+            font=("Helvetica", 10),
+            bg="white",
+            relief=tk.SUNKEN,
+            padx=5,
         )
-        self.selected_emulator_label.pack(side=tk.LEFT)
+        self.selected_emulator_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
+        # Control Section
+        control_frame = self.create_section_frame(main_container, "Bot Controls")
+
+        button_style = {
+            "font": ("Helvetica", 10, "bold"),
+            "relief": tk.FLAT,
+            "padx": 15,
+            "pady": 5,
+        }
 
         self.start_stop_button = tk.Button(
-            button_frame,
+            control_frame,
             text="Start Bot",
             command=self.toggle_bot,
-            width=20,
-            relief=tk.RAISED,
-            bd=3,
-            font=("Helvetica", 10),
+            bg="#2196F3",
+            fg="white",
+            **button_style,
         )
         self.start_stop_button.pack(side=tk.LEFT, padx=5)
 
-        action_frame = tk.Frame(self.root)
-        action_frame.pack(pady=10)
+        self.debug_button = tk.Button(
+            control_frame,
+            text="Debug Window",
+            command=self.toggle_debug_window,
+            bg="#FF9800",
+            fg="white",
+            **button_style,
+        )
+        self.debug_button.pack(side=tk.LEFT, padx=5)
+
+        # Screenshot Section
+        screenshot_frame = self.create_section_frame(main_container, "Screenshot Tools")
 
         self.screenshot_button = tk.Button(
-            action_frame,
-            text="Screenshot",
+            screenshot_frame,
+            text="Take Screenshot",
             command=self.take_screenshot,
-            width=20,
-            relief=tk.RAISED,
-            bd=3,
-            font=("Helvetica", 10),
+            bg="#9C27B0",
+            fg="white",
+            **button_style,
         )
         self.screenshot_button.pack(side=tk.LEFT, padx=5)
 
-        region_frame = tk.Frame(self.root)
-        region_frame.pack(pady=10)
+        # Region Selection Section
+        region_frame = self.create_section_frame(main_container, "Region Selection")
 
-        tk.Label(region_frame, text="Start X:", font=("Helvetica", 10)).grid(
-            row=0, column=0, padx=5
-        )
-        self.start_x_entry = tk.Entry(region_frame, width=15, font=("Helvetica", 10))
-        self.start_x_entry.grid(row=0, column=1)
+        # Create grid for region inputs
+        entry_style = {"width": 8, "font": ("Helvetica", 10)}
 
-        tk.Label(region_frame, text="Start Y:", font=("Helvetica", 10)).grid(
-            row=0, column=2, padx=5
-        )
-        self.start_y_entry = tk.Entry(region_frame, width=15, font=("Helvetica", 10))
-        self.start_y_entry.grid(row=0, column=3)
+        coords_frame = tk.Frame(region_frame, bg="#f0f0f0")
+        coords_frame.pack(fill=tk.X, pady=5)
 
-        tk.Label(region_frame, text="Width:", font=("Helvetica", 10)).grid(
-            row=1, column=0, padx=5
-        )
-        self.width_entry = tk.Entry(region_frame, width=15, font=("Helvetica", 10))
-        self.width_entry.grid(row=1, column=1)
+        # Add coordinate inputs with better layout
+        for i, (label, var) in enumerate(
+            [
+                ("Start X:", self.start_x_entry),
+                ("Start Y:", self.start_y_entry),
+                ("Width:", self.width_entry),
+                ("Height:", self.height_entry),
+            ]
+        ):
+            tk.Label(
+                coords_frame, text=label, font=("Helvetica", 10), bg="#f0f0f0"
+            ).grid(row=i // 2, column=i % 2 * 2, padx=5, pady=3)
 
-        tk.Label(region_frame, text="Height:", font=("Helvetica", 10)).grid(
-            row=1, column=2, padx=5
-        )
-        self.height_entry = tk.Entry(region_frame, width=15, font=("Helvetica", 10))
-        self.height_entry.grid(row=1, column=3)
+            entry = tk.Entry(coords_frame, **entry_style)
+            entry.grid(row=i // 2, column=i % 2 * 2 + 1, padx=5, pady=3)
+            setattr(self, f"{var}", entry)
 
         self.region_screenshot_button = tk.Button(
             region_frame,
             text="Capture Region",
             command=self.take_region_screenshot,
-            width=20,
-            relief=tk.RAISED,
-            bd=3,
-            font=("Helvetica", 10),
+            bg="#9C27B0",
+            fg="white",
+            **button_style,
         )
-        self.region_screenshot_button.grid(row=2, column=0, columnspan=4, pady=10)
+        self.region_screenshot_button.pack(pady=10)
+
+        # Status Section
+        status_frame = self.create_section_frame(main_container, "Status")
 
         self.status_label = tk.Label(
-            self.root, text="Status: Not running", font=("Helvetica", 10)
+            status_frame,
+            text="Status: Not running",
+            font=("Helvetica", 10, "bold"),
+            fg="#E74C3C",
+            bg="#f0f0f0",
         )
-        self.status_label.pack()
+        self.status_label.pack(pady=5)
 
-        self.log_text = tk.Text(self.root, font=("Helvetica", 10))
-        self.log_text.pack()
+        # Log Section
+        log_frame = self.create_section_frame(main_container, "Log")
+        # Make log_frame expand
+        log_frame.pack_configure(fill=tk.BOTH, expand=True)
+
+        # Create log text with scrollbar
+        log_container = tk.Frame(log_frame)
+        log_container.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(log_container)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.log_text = tk.Text(
+            log_container,
+            font=("Consolas", 10),
+            bg="white",
+            height=10,  # This becomes the minimum height
+            yscrollcommand=scrollbar.set,
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.log_text.yview)
+
+    def create_section_frame(self, parent, title):
+        """Helper method to create consistent section frames"""
+        frame = tk.LabelFrame(
+            parent,
+            text=title,
+            font=("Helvetica", 11, "bold"),
+            bg="#f0f0f0",
+            fg="#34495E",
+            pady=5,
+            padx=10,
+        )
+        frame.pack(fill=tk.X, pady=5)
+        return frame
+
+    def toggle_debug_window(self):
+        if (
+            self.debug_window.window is None
+            or not self.debug_window.window.winfo_viewable()
+        ):
+            # Get main window's position and size
+            main_x = self.root.winfo_x()
+            main_y = self.root.winfo_y()
+            main_height = self.root.winfo_height()
+            self.debug_window.open_window(main_x, main_y, main_height)
+        else:
+            self.debug_window.close_window()
 
     def load_configs(self):
         config = self.config_manager.load()
@@ -139,16 +242,27 @@ class BotUI:
     def toggle_bot(self):
         if not self.bot_running:
             self.bot_running = True
-            self.start_stop_button.config(text="Stop Bot")
-            self.status_label.config(text="Status: Running")
+            self.start_stop_button.config(
+                text="Stop Bot",
+                bg="#E74C3C",  # Red for stop
+            )
+            self.status_label.config(
+                text="Status: Running",
+                fg="#27AE60",  # Green for running
+            )
             self.log_message("Bot started.")
-
             self.bot.start()
         else:
             self.bot.stop()
             self.bot_running = False
-            self.start_stop_button.config(text="Start Bot")
-            self.status_label.config(text="Status: Not running")
+            self.start_stop_button.config(
+                text="Start Bot",
+                bg="#2196F3",  # Blue for start
+            )
+            self.status_label.config(
+                text="Status: Not running",
+                fg="#E74C3C",  # Red for not running
+            )
             self.log_message("Bot stopped.")
 
     def select_emulator_path(self):

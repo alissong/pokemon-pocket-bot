@@ -17,6 +17,7 @@ class PokemonBot:
         self.app_state = app_state
         self.log_callback = log_callback
         self.ui_instance = ui_instance
+        self.debug_window = ui_instance.debug_window
 
         self.template_images = load_template_images("images")
         images_cards_folder = "images/cards"
@@ -25,7 +26,7 @@ class PokemonBot:
         self.card_images = load_all_cards(images_cards_folder)
 
         self.card_data_service = CardDataService()
-        self.image_processor = ImageProcessor(self.log_callback)
+        self.image_processor = ImageProcessor(self.log_callback, self.debug_window)
         self.battle_controller = BattleController(
             self.image_processor,
             self.template_images,
@@ -52,6 +53,7 @@ class PokemonBot:
             self.game_state,
             self.template_images,
             self.log_callback,
+            self.debug_window,
         )
 
     def start(self):
