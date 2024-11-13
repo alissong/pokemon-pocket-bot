@@ -17,7 +17,7 @@ class BattleController:
         go_first = False
         self.log_callback("Checking turn...")
         if not running:
-            return is_your_turn, is_first_turn
+            return is_your_turn, is_first_turn, go_first
         screenshot1 = self.image_processor.capture_region(turn_check_region)
         time.sleep(1)
         screenshot2 = self.image_processor.capture_region(turn_check_region)
@@ -126,6 +126,14 @@ class BattleController:
             time.sleep(4)
         else:
             self.log_callback("Rival hasn't conceded")
+
+    def check_rival_afk(self, screenshot):
+        self.log_callback("Checking if the rival is AFK...")
+        if self.image_processor.check_and_click(
+            screenshot, self.template_images.get("OK_BUTTON_AFK"), "OK Button AFK", 0.7
+        ):
+            return True
+        return False
 
     def get_card(self, x, y, duration=1.0):
         x_zoom_card_region, y_zoom_card_region, w, h = ZOOM_CARD_REGION

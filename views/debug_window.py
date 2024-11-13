@@ -1,5 +1,3 @@
-# views/debug_window.py
-
 import tkinter as tk
 from tkinter import ttk
 
@@ -23,6 +21,17 @@ CLICK_MARKER_COLOR = "red"
 DRAG_LINE_COLOR = "blue"
 MARKER_WIDTH = 3  # Width of drawn markers
 
+# Theme Configuration
+THEME = {
+    "bg_color": "#2E3440",
+    "fg_color": "#D8DEE9",
+    "accent_color": "#81A1C1",
+    "button_bg": "#4C566A",
+    "entry_bg": "#3B4252",
+    "entry_fg": "#D8DEE9",
+    "font": ("Consolas", 10),
+}
+
 
 class DebugWindow:
     def __init__(self, root, max_history=50):
@@ -42,6 +51,7 @@ class DebugWindow:
         self.window = tk.Toplevel(self.root)
         self.window.title("Debug Window")
         self.window.protocol("WM_DELETE_WINDOW", self.window.withdraw)
+        self.window.configure(bg=THEME["bg_color"])
 
         screen_width = self.root.winfo_screenwidth()
         window_width = int(screen_width * SCREEN_WIDTH_RATIO)
@@ -59,34 +69,44 @@ class DebugWindow:
             main_width = self.root.winfo_width()
             self.window.geometry(f"+{main_x + main_width + 0}+{main_y}")
 
-        # Create main frame
-        main_frame = tk.Frame(self.window)
+        # Create main frame with theme
+        main_frame = tk.Frame(self.window, bg=THEME["bg_color"])
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create PanedWindow to split action list and image display
-        paned_window = ttk.Panedwindow(main_frame, orient=tk.HORIZONTAL)
+        # Update PanedWindow style
+        style = ttk.Style()
+        style.configure("Custom.TPanedwindow", background=THEME["bg_color"])
+        paned_window = ttk.Panedwindow(
+            main_frame, orient=tk.HORIZONTAL, style="Custom.TPanedwindow"
+        )
         paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # Left frame for action list
-        self.action_frame = tk.Frame(paned_window)
-        paned_window.add(self.action_frame, weight=1)
+        # Theme the frames
+        self.action_frame = tk.Frame(paned_window, bg=THEME["bg_color"])
+        self.image_frame = tk.Frame(paned_window, bg=THEME["bg_color"])
 
-        # Right frame for image display
-        self.image_frame = tk.Frame(paned_window)
+        # Add frames to paned window
+        paned_window.add(self.action_frame, weight=1)
         paned_window.add(self.image_frame, weight=3)
 
         # Set up action list with scrollbar
-        scrollbar = tk.Scrollbar(self.action_frame)
+        scrollbar = tk.Scrollbar(
+            self.action_frame, bg=THEME["bg_color"], troughcolor=THEME["entry_bg"]
+        )
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.action_listbox = tk.Listbox(
             self.action_frame,
-            font=LISTBOX_FONT,
+            font=THEME["font"],
             selectmode=tk.SINGLE,
             activestyle="dotbox",
-            selectbackground=LISTBOX_SELECT_BG,
-            selectforeground=LISTBOX_SELECT_FG,
+            bg=THEME["entry_bg"],
+            fg=THEME["fg_color"],
+            selectbackground=THEME["accent_color"],
+            selectforeground=THEME["fg_color"],
             yscrollcommand=scrollbar.set,
+            relief=tk.FLAT,
+            borderwidth=0,
         )
         self.action_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.action_listbox.yview)
@@ -98,15 +118,14 @@ class DebugWindow:
         self.window.bind("<Configure>", self.on_window_resize)
 
         # Image display label
-        self.image_label = tk.Label(self.image_frame)
+        self.image_label = tk.Label(self.image_frame, bg=THEME["bg_color"])
         self.image_label.pack(fill=tk.BOTH, expand=True)
 
         # Configure weights for resizing
         main_frame.grid_rowconfigure(0, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # Set initial paned window sash position
-        paned_window.pack(fill=tk.BOTH, expand=True)
+        # Set initial paned window sash position after adding panes
         self.window.update()
         paned_window.sashpos(0, int(window_width * PANED_WINDOW_RATIO))
 

@@ -102,6 +102,7 @@ class GameController:
             if self.is_battle_over(screenshot) or self.next_step_available(screenshot):
                 break
 
+            self.battle_controller.check_rival_afk(screenshot)
             # Add check for rival concede
             self.battle_controller.check_rival_concede(
                 screenshot, self.running, self.stop

@@ -5,7 +5,6 @@ import threading
 import uuid
 
 import cv2
-import numpy as np
 import requests
 
 from utils.adb_utils import find_subimage
@@ -130,10 +129,17 @@ class CardRecognitionService:
     def calculate_similarities(self, cards, zoomed_card_image):
         similarities = []
         for card in cards:
-            image_url = self.card_data_service.get_card_image_url(card["id"])
-            response = requests.get(image_url)
-            image_data = np.asarray(bytearray(response.content), dtype=np.uint8)
-            api_card_image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+            card_id = card["id"]
+            image_path = f"card_images_api_cache/{card_id}.png"
+            if not os.path.exists(image_path):
+                # Download and save the image
+                image_url = self.card_data_service.get_card_image_url(card_id)
+                response = requests.get(image_url)
+                with open(image_path, "wb") as f:
+                    f.write(response.content)
+            # Load the image from cache
+            api_card_image = cv2.imread(image_path)
+            # Proceed with similarity calculation
             standard_size = (200, 300)
             resized_api_card_image = cv2.resize(api_card_image, standard_size)
             resized_full_card_image = cv2.resize(zoomed_card_image, standard_size)

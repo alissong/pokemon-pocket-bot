@@ -1,5 +1,6 @@
 # src/views/ui.py
 
+import os
 import tkinter as tk
 from tkinter import filedialog
 
@@ -12,24 +13,64 @@ from bot import PokemonBot
 from utils.adb_utils import take_screenshot
 from utils.config_manager import ConfigManager
 from views.debug_window import DebugWindow
+from views.region_capture import RegionCaptureUI
+
+# Constants and Configuration
+UI_COLORS = {
+    "bg": "#2E3440",
+    "fg": "#D8DEE9",
+    "accent": "#81A1C1",
+    "button_bg": "#4C566A",
+    "entry_bg": "#3B4252",
+    "entry_fg": "#D8DEE9",
+    "success": "#27AE60",  # Green
+    "error": "#E74C3C",  # Red
+    "warning": "#F39C12",  # Orange
+    "info": "#2196F3",  # Blue
+}
+
+UI_FONTS = {
+    "header": ("Consolas", 16, "bold"),
+    "text": ("Consolas", 10),
+    "small": ("Helvetica", 8),
+}
+
+WINDOW_CONFIG = {"width": 900, "height": 700, "title": "Pokemon Pocket Bot"}
+
+GAME_STATE_CONFIG = {
+    "refresh_interval": 1000,  # ms
+    "text_height": {"active": 2, "hand": 8, "bench": 8},
+    "text_width": {"hand": 20, "bench": 20, "log": 35},
+}
+
+CARD_PROMPT_CONFIG = {
+    "timeout": 12,  # seconds
+    "max_image_height": 400,
+    "window_size": "400x600",
+}
+
+CARD_OPTIONS_CONFIG = {
+    "window_size": "800x600",
+    "columns": 3,
+    "card_dimensions": (150, 210),  # width, height
+    "max_zoomed_height": 200,
+}
 
 
 class BotUI:
     def __init__(self, root, app_state):
         self.root = root
         self.app_state = app_state
-        self.root.title("Pokemon Pocket Bot")
+        self.root.title(WINDOW_CONFIG["title"])
         self.config_manager = ConfigManager()
         self.debug_window = DebugWindow(root)
         self.bot = PokemonBot(app_state, self.log_message, self)
 
+        # Initialize state variables
         self.bot_running = False
-
         self.card_name_event = None
         self.card_name = None
         self.selected_card = None
-
-        # Initialize entry variables
         self.start_x_entry = None
         self.start_y_entry = None
         self.width_entry = None
@@ -39,177 +80,143 @@ class BotUI:
         self.load_configs()
 
     def setup_ui(self):
-        # Update window size for wider layout
-        self.root.geometry(
-            "800x700"
-        )  # Increased width further to better accommodate both panels
+        # Update window size
+        self.root.geometry(f"{WINDOW_CONFIG['width']}x{WINDOW_CONFIG['height']}")
+        self.root.configure(bg=UI_COLORS["bg"])
+
+        # Set dark theme colors
+        bg_color = UI_COLORS["bg"]
+        fg_color = UI_COLORS["fg"]
+        accent_color = UI_COLORS["accent"]
+        button_bg_color = UI_COLORS["button_bg"]
+        entry_bg_color = UI_COLORS["entry_bg"]
+        entry_fg_color = UI_COLORS["entry_fg"]
+        header_font = UI_FONTS["header"]
+        text_font = UI_FONTS["text"]
+
+        # Create menu bar
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # Configuration menu
+        config_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Configuration", menu=config_menu)
+        config_menu.add_command(
+            label="Select Emulator Path", command=self.select_emulator_path
+        )
+
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Take Screenshot", command=self.take_screenshot)
+        tools_menu.add_command(
+            label="Capture Region", command=self.take_region_screenshot
+        )
+        tools_menu.add_command(label="Debug Window", command=self.toggle_debug_window)
 
         # Create main container with horizontal layout
-        main_container = tk.Frame(self.root, bg="#f0f0f0")
+        main_container = tk.Frame(self.root, bg=bg_color)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Create left panel for main controls (increase relative space)
-        left_panel = tk.Frame(main_container, bg="#f0f0f0")
+        # Create left panel for main controls
+        left_panel = tk.Frame(main_container, bg=bg_color)
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-        # Create right panel for logs (adjust width)
-        right_panel = tk.Frame(main_container, bg="#f0f0f0", width=400)
+        # Create right panel for logs
+        right_panel = tk.Frame(main_container, bg=bg_color, width=400)
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
         right_panel.pack_propagate(False)
 
-        # Simplified header with less space
-        header_frame = tk.Frame(left_panel, bg="#f0f0f0")
+        # Header
+        header_frame = tk.Frame(left_panel, bg=bg_color)
         header_frame.pack(fill=tk.X, pady=(0, 10))
 
         tk.Label(
             header_frame,
-            text="Pokemon Pocket Bot ⚔️",
-            font=("Helvetica", 16, "bold"),  # Reduced font size
-            bg="#f0f0f0",
-            fg="#2C3E50",
-        ).pack(pady=5)  # Reduced padding
+            text=WINDOW_CONFIG["title"],
+            font=UI_FONTS["header"],
+            bg=bg_color,
+            fg=UI_COLORS["accent"],
+        ).pack(pady=5)
 
-        # Make main_container expand vertically
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
-
-        # Create sections with distinct grouping
-        # Path Selection Section
-        path_frame = self.create_section_frame(left_panel, "Emulator Configuration")
-
-        self.select_path_button = tk.Button(
-            path_frame,
-            text="Select Emulator Path",
-            command=self.select_emulator_path,
-            font=("Helvetica", 10),
-            bg="#4CAF50",
-            fg="white",
-            relief=tk.FLAT,
-            padx=10,
+        # Bot Controls Section
+        control_frame = self.create_section_frame(
+            left_panel, "Bot Controls", bg_color, fg_color, text_font
         )
-        self.select_path_button.pack(side=tk.LEFT, padx=5)
-
-        self.selected_emulator_label = tk.Label(
-            path_frame,
-            text="",
-            font=("Helvetica", 10),
-            bg="white",
-            relief=tk.SUNKEN,
-            padx=5,
-        )
-        self.selected_emulator_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-
-        # Control Section
-        control_frame = self.create_section_frame(left_panel, "Bot Controls")
 
         button_style = {
-            "font": ("Helvetica", 10, "bold"),
+            "font": text_font,
             "relief": tk.FLAT,
+            "bg": button_bg_color,
+            "fg": fg_color,
             "padx": 15,
             "pady": 5,
         }
 
         self.start_stop_button = tk.Button(
-            control_frame,
-            text="Start Bot",
-            command=self.toggle_bot,
-            bg="#2196F3",
-            fg="white",
-            **button_style,
+            control_frame, text="Start Bot", command=self.toggle_bot, **button_style
         )
-        self.start_stop_button.pack(side=tk.LEFT, padx=5)
-
-        self.debug_button = tk.Button(
-            control_frame,
-            text="Debug Window",
-            command=self.toggle_debug_window,
-            bg="#FF9800",
-            fg="white",
-            **button_style,
-        )
-        self.debug_button.pack(side=tk.LEFT, padx=5)
-
-        # Screenshot Section
-        screenshot_frame = self.create_section_frame(left_panel, "Screenshot Tools")
-
-        self.screenshot_button = tk.Button(
-            screenshot_frame,
-            text="Take Screenshot",
-            command=self.take_screenshot,
-            bg="#9C27B0",
-            fg="white",
-            **button_style,
-        )
-        self.screenshot_button.pack(side=tk.LEFT, padx=5)
-
-        # Define entry style before region selection section
-        entry_style = {
-            "width": 8,
-            "font": ("Helvetica", 10),
-            "relief": tk.SUNKEN,
-            "bg": "white",
-        }
-
-        # Region Selection Section
-        region_frame = self.create_collapsible_section(left_panel, "Region Selection")
-
-        # Move region selection content to a separate frame
-        coords_frame = tk.Frame(region_frame, bg="#f0f0f0")
-        coords_frame.pack(fill=tk.X)
-
-        # Add coordinate inputs with better layout
-        for i, (label, var) in enumerate(
-            [
-                ("Start X:", self.start_x_entry),
-                ("Start Y:", self.start_y_entry),
-                ("Width:", self.width_entry),
-                ("Height:", self.height_entry),
-            ]
-        ):
-            tk.Label(
-                coords_frame, text=label, font=("Helvetica", 10), bg="#f0f0f0"
-            ).grid(row=i // 2, column=i % 2 * 2, padx=5, pady=3)
-
-            entry = tk.Entry(coords_frame, **entry_style)
-            entry.grid(row=i // 2, column=i % 2 * 2 + 1, padx=5, pady=3)
-            setattr(self, f"{var}", entry)
-
-        self.region_screenshot_button = tk.Button(
-            coords_frame,
-            text="Capture Region",
-            command=self.take_region_screenshot,
-            bg="#9C27B0",
-            fg="white",
-            **button_style,
-        )
-        self.region_screenshot_button.grid(row=2, column=0, columnspan=4, pady=5)
+        self.start_stop_button.pack(pady=5)
 
         # Status Section
-        status_frame = self.create_section_frame(left_panel, "Status")
+        status_frame = self.create_section_frame(
+            left_panel, "Status", bg_color, fg_color, text_font
+        )
+
+        # Create a container for status and debug button
+        status_container = tk.Frame(status_frame, bg=bg_color)
+        status_container.pack(fill=tk.X, pady=5)
 
         self.status_label = tk.Label(
-            status_frame,
+            status_container,
             text="Status: Not running",
-            font=("Helvetica", 10, "bold"),
-            fg="#E74C3C",
-            bg="#f0f0f0",
+            font=text_font,
+            fg=UI_COLORS["error"],
+            bg=bg_color,
         )
-        self.status_label.pack(pady=5)
+        self.status_label.pack(side=tk.LEFT, pady=5)
 
-        # Add Game State Display Section with refresh button
-        game_state_frame = self.create_section_frame(left_panel, "Game State Display")
+        # Add debug button
+        debug_button = tk.Button(
+            status_container,
+            text="🔍 Debug",
+            command=self.toggle_debug_window,
+            font=text_font,
+            relief=tk.FLAT,
+            bg=button_bg_color,
+            fg=fg_color,
+            padx=10,
+        )
+        debug_button.pack(side=tk.RIGHT, padx=5)
 
-        # Add refresh controls
-        refresh_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        # Selected emulator path display
+        self.selected_emulator_label = tk.Label(
+            status_frame,
+            text="",
+            font=text_font,
+            bg=entry_bg_color,
+            fg=entry_fg_color,
+            relief=tk.FLAT,
+            padx=5,
+        )
+        self.selected_emulator_label.pack(fill=tk.X, padx=5, pady=2)
+
+        # Game State Display Section
+        game_state_frame = self.create_section_frame(
+            left_panel, "Game State Display", bg_color, fg_color, text_font
+        )
+
+        # Refresh controls
+        refresh_frame = tk.Frame(game_state_frame, bg=bg_color)
         refresh_frame.pack(fill=tk.X, pady=(0, 5))
 
         self.refresh_button = tk.Button(
             refresh_frame,
             text="🔄 Refresh",
             command=self.update_game_state_display,
-            bg="#4CAF50",
-            fg="white",
-            font=("Helvetica", 9),
+            bg=button_bg_color,
+            fg=fg_color,
+            font=text_font,
             relief=tk.FLAT,
         )
         self.refresh_button.pack(side=tk.LEFT, padx=5)
@@ -219,45 +226,80 @@ class BotUI:
             refresh_frame,
             text="Auto refresh",
             variable=self.auto_refresh_var,
-            bg="#f0f0f0",
-            font=("Helvetica", 9),
+            bg=bg_color,
+            fg=fg_color,
+            font=text_font,
+            activebackground=bg_color,
+            activeforeground=fg_color,
+            selectcolor=bg_color,
         )
         self.auto_refresh_check.pack(side=tk.LEFT)
 
-        # Active Pokémon display at the top
-        active_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        # Active Pokémon display
+        active_frame = tk.Frame(game_state_frame, bg=bg_color)
         active_frame.pack(fill=tk.X, padx=5, pady=2)
         tk.Label(
             active_frame,
             text="Active Pokémon:",
-            font=("Helvetica", 10, "bold"),
-            bg="#f0f0f0",
+            font=text_font,
+            bg=bg_color,
+            fg=accent_color,
         ).pack(side=tk.LEFT)
         self.active_text = tk.Text(
-            active_frame, height=2, width=30, font=("Consolas", 9)
+            active_frame,
+            height=2,
+            width=30,
+            font=text_font,
+            bg=entry_bg_color,
+            fg=entry_fg_color,
+            relief=tk.FLAT,
         )
         self.active_text.pack(fill=tk.X, padx=5)
 
-        # Create two columns for hand and bench
-        columns_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        # Hand and Bench columns
+        columns_frame = tk.Frame(game_state_frame, bg=bg_color)
         columns_frame.pack(fill=tk.X, expand=True, padx=5, pady=2)
 
         # Hand column
-        hand_frame = tk.Frame(columns_frame, bg="white", relief=tk.GROOVE, bd=2)
+        hand_frame = tk.Frame(columns_frame, bg=entry_bg_color, relief=tk.FLAT)
         hand_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         tk.Label(
-            hand_frame, text="Hand", font=("Helvetica", 10, "bold"), bg="white"
+            hand_frame,
+            text="Hand",
+            font=text_font,
+            bg=entry_bg_color,
+            fg=accent_color,
         ).pack()
-        self.hand_text = tk.Text(hand_frame, height=8, width=20, font=("Consolas", 9))
+        self.hand_text = tk.Text(
+            hand_frame,
+            height=GAME_STATE_CONFIG["text_height"]["hand"],
+            width=GAME_STATE_CONFIG["text_width"]["hand"],
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["entry_fg"],
+            relief=tk.FLAT,
+        )
         self.hand_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
         # Bench column
-        bench_frame = tk.Frame(columns_frame, bg="white", relief=tk.GROOVE, bd=2)
+        bench_frame = tk.Frame(columns_frame, bg=entry_bg_color, relief=tk.FLAT)
         bench_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         tk.Label(
-            bench_frame, text="Bench", font=("Helvetica", 10, "bold"), bg="white"
+            bench_frame,
+            text="Bench",
+            font=text_font,
+            bg=entry_bg_color,
+            fg=accent_color,
         ).pack()
-        self.bench_text = tk.Text(bench_frame, height=8, width=20, font=("Consolas", 9))
+        self.bench_text = tk.Text(
+            bench_frame,
+            height=GAME_STATE_CONFIG["text_height"]["bench"],
+            width=GAME_STATE_CONFIG["text_width"]["bench"],
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["entry_fg"],
+            relief=tk.FLAT,
+        )
         self.bench_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
         # Make all text widgets read-only
@@ -265,83 +307,86 @@ class BotUI:
             widget.config(state=tk.DISABLED)
 
         # Log Section
-        log_frame = self.create_section_frame(right_panel, "Log")
+        log_frame = self.create_section_frame(
+            right_panel, "Log", bg_color, fg_color, text_font
+        )
         log_frame.pack(fill=tk.BOTH, expand=True)
 
         # Create log text with scrollbar
-        log_container = tk.Frame(log_frame)
+        log_container = tk.Frame(log_frame, bg=bg_color)
         log_container.pack(fill=tk.BOTH, expand=True)
 
-        scrollbar = tk.Scrollbar(log_container)
+        scrollbar = tk.Scrollbar(log_container, bg=bg_color, troughcolor=entry_bg_color)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.log_text = tk.Text(
             log_container,
-            font=("Consolas", 9),
-            bg="white",
-            width=35,
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["entry_fg"],
+            width=GAME_STATE_CONFIG["text_width"]["log"],
             height=40,
             wrap=tk.WORD,
+            relief=tk.FLAT,
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.log_text.yview)
+        self.log_text.config(yscrollcommand=scrollbar.set)
 
         # Start the auto-refresh cycle
         self.start_auto_refresh()
 
-    def create_section_frame(self, parent, title):
+    def create_section_frame(self, parent, title, bg_color, fg_color, font):
         """Helper method to create consistent section frames"""
         frame = tk.LabelFrame(
             parent,
             text=title,
-            font=("Helvetica", 11, "bold"),
-            bg="#f0f0f0",
-            fg="#34495E",
+            font=font,
+            bg=bg_color,
+            fg=fg_color,
             pady=5,
             padx=10,
+            relief=tk.FLAT,
         )
         frame.pack(fill=tk.X, pady=5)
         return frame
 
-    def create_collapsible_section(self, parent, title):
+    def create_collapsible_section(self, parent, title, bg_color, fg_color, font):
         """Helper method to create collapsible section frames"""
-        # Create a frame without padding to minimize height
         frame = tk.LabelFrame(
             parent,
             text=title,
-            font=("Helvetica", 11, "bold"),
-            bg="#f0f0f0",
-            fg="#34495E",
-            pady=0,  # Removed padding
-            padx=5,  # Minimal padding
+            font=font,
+            bg=bg_color,
+            fg=fg_color,
+            pady=0,
+            padx=5,
+            relief=tk.FLAT,
         )
-        frame.pack(fill=tk.X, pady=1)  # Reduced outer padding
+        frame.pack(fill=tk.X, pady=1)
 
-        # Create a container for the content
-        content_frame = tk.Frame(frame, bg="#f0f0f0")
+        content_frame = tk.Frame(frame, bg=bg_color)
 
         def toggle_section():
             if content_frame.winfo_viewable():
                 content_frame.pack_forget()
                 toggle_btn.config(text="▼")
-                # Minimize frame height when collapsed
                 frame.configure(height=20)
             else:
-                content_frame.pack(fill=tk.X, pady=2)  # Reduced inner padding
+                content_frame.pack(fill=tk.X, pady=2)
                 toggle_btn.config(text="▲")
-                frame.configure(height=0)  # Let it expand naturally when open
+                frame.configure(height=0)
 
-        # Make toggle button smaller and more compact
         toggle_btn = tk.Button(
             frame,
             text="▼",
             command=toggle_section,
-            font=("Helvetica", 6),  # Smaller font
-            width=1,  # Smaller width
-            height=1,  # Smaller height
+            font=("Helvetica", 8),
+            width=2,
+            height=1,
             relief=tk.FLAT,
-            padx=1,
-            pady=0,
+            bg=bg_color,
+            fg=fg_color,
         )
         toggle_btn.pack(side=tk.RIGHT, padx=2, pady=0)
 
@@ -375,27 +420,15 @@ class BotUI:
     def toggle_bot(self):
         if not self.bot_running:
             self.bot_running = True
-            self.start_stop_button.config(
-                text="Stop Bot",
-                bg="#E74C3C",  # Red for stop
-            )
-            self.status_label.config(
-                text="Status: Running",
-                fg="#27AE60",  # Green for running
-            )
+            self.start_stop_button.config(text="Stop Bot", bg=UI_COLORS["error"])
+            self.status_label.config(text="Status: Running", fg=UI_COLORS["success"])
             self.log_message("Bot started.")
             self.bot.start()
         else:
             self.bot.stop()
             self.bot_running = False
-            self.start_stop_button.config(
-                text="Start Bot",
-                bg="#2196F3",  # Blue for start
-            )
-            self.status_label.config(
-                text="Status: Not running",
-                fg="#E74C3C",  # Red for not running
-            )
+            self.start_stop_button.config(text="Start Bot", bg=UI_COLORS["info"])
+            self.status_label.config(text="Status: Not running", fg=UI_COLORS["error"])
             self.log_message("Bot stopped.")
 
     def select_emulator_path(self):
@@ -411,22 +444,39 @@ class BotUI:
         self.log_message("Screenshot taken.")
 
     def take_region_screenshot(self):
-        self.log_message(self.start_x_entry.get())
+        # Take a screenshot first
+        screenshot = take_screenshot()
+        if screenshot is not None:
+            # Create and show the region capture UI
+            capture_ui = RegionCaptureUI(screenshot)
+            region = capture_ui.get_region()
 
-        if (
-            self.start_x_entry.get()
-            and self.start_y_entry.get()
-            and self.width_entry.get()
-            and self.height_entry.get()
-        ):
-            region = (
-                int(self.start_x_entry.get()),
-                int(self.start_y_entry.get()),
-                int(self.width_entry.get()),
-                int(self.height_entry.get()),
-            )
-            screenshot = self.bot.image_processor.capture_region(region)
-            self.log_message("Region screenshot taken.")
+            if region:
+                # Take the actual region screenshot
+                region_screenshot = self.bot.image_processor.capture_region(region)
+
+                # Ensure images directory exists
+                images_dir = os.path.join(os.getcwd(), "images")
+                os.makedirs(images_dir, exist_ok=True)
+
+                # Ask user where to save the file
+                file_path = filedialog.asksaveasfilename(
+                    initialdir=images_dir,
+                    defaultextension=".PNG",
+                    filetypes=[
+                        ("PNG files", "*.png"),
+                        ("JPEG files", "*.jpg"),
+                        ("All files", "*.*"),
+                    ],
+                    title="Save Region Screenshot",
+                )
+
+                if file_path:
+                    # Save the screenshot
+                    cv2.imwrite(file_path, region_screenshot)
+                    self.log_message(f"Region screenshot saved to: {file_path}")
+                else:
+                    self.log_message("Region screenshot capture cancelled.")
 
     def request_card_name(self, image, event, error_message=None):
         self.card_name_event = event
@@ -436,14 +486,18 @@ class BotUI:
     def show_card_prompt(self, image, error_message=None):
         window = tk.Toplevel(self.root)
         window.title("Unknown Card")
-        window.geometry("400x600")
+        window.geometry(CARD_PROMPT_CONFIG["window_size"])
 
         # Add timeout label
-        timeout_label = tk.Label(window, text="Time remaining: 12s", fg="red")
+        timeout_label = tk.Label(
+            window,
+            text=f"Time remaining: {CARD_PROMPT_CONFIG['timeout']}s",
+            fg=UI_COLORS["error"],
+        )
         timeout_label.pack(pady=5)
 
         # Timeout counter
-        remaining_time = 12
+        remaining_time = CARD_PROMPT_CONFIG["timeout"]
 
         def update_timeout():
             nonlocal remaining_time
@@ -459,7 +513,7 @@ class BotUI:
         # Convert and resize image
         cv_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         height, width = cv_image.shape[:2]
-        max_height = 400
+        max_height = CARD_PROMPT_CONFIG["max_image_height"]
 
         if height > max_height:
             scale = max_height / height
@@ -503,7 +557,7 @@ class BotUI:
     def show_card_options(self, similarities, zoomed_card_image, event):
         window = tk.Toplevel(self.root)
         window.title("Select the Correct Card")
-        window.geometry("800x600")
+        window.geometry(CARD_OPTIONS_CONFIG["window_size"])
 
         # Create main container with fixed height
         main_frame = tk.Frame(window)
@@ -520,7 +574,7 @@ class BotUI:
         # Scale zoomed card image
         cv_image = cv2.cvtColor(zoomed_card_image, cv2.COLOR_BGR2RGB)
         height, width = cv_image.shape[:2]
-        max_height = 200
+        max_height = CARD_OPTIONS_CONFIG["max_zoomed_height"]
         if height > max_height:
             scale = max_height / height
             new_width = int(width * scale)
@@ -547,7 +601,7 @@ class BotUI:
         canvas.configure(yscrollcommand=scrollbar.set)
 
         # Grid for cards (3 columns)
-        COLUMNS = 3
+        COLUMNS = CARD_OPTIONS_CONFIG["columns"]
         card_images = []  # Keep references to images
 
         for idx, (card, similarity) in enumerate(similarities):
@@ -564,7 +618,9 @@ class BotUI:
             api_card_image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
 
             # Fixed size for all card images
-            api_card_image = cv2.resize(api_card_image, (150, 210))
+            api_card_image = cv2.resize(
+                api_card_image, CARD_OPTIONS_CONFIG["card_dimensions"]
+            )
             api_cv_image = cv2.cvtColor(api_card_image, cv2.COLOR_BGR2RGB)
             api_pil_image = Image.fromarray(api_cv_image)
             api_tk_image = ImageTk.PhotoImage(api_pil_image)
@@ -633,10 +689,10 @@ class BotUI:
             if self.auto_refresh_var.get():
                 self.update_game_state_display()
             # Schedule the next refresh in 1 second
-            self.root.after(1000, refresh_cycle)
+            self.root.after(GAME_STATE_CONFIG["refresh_interval"], refresh_cycle)
 
         # Start the first refresh cycle
-        self.root.after(1000, refresh_cycle)
+        self.root.after(GAME_STATE_CONFIG["refresh_interval"], refresh_cycle)
 
     def update_game_state_display(self):
         """Update the game state display with current information"""
