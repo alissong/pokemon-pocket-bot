@@ -39,33 +39,43 @@ class BotUI:
         self.load_configs()
 
     def setup_ui(self):
-        # Configure root window
-        self.root.geometry("500x750")  # Slightly larger default size
-        self.root.configure(bg="#f0f0f0")  # Light gray background
+        # Update window size for wider layout
+        self.root.geometry(
+            "800x700"
+        )  # Increased width further to better accommodate both panels
 
-        # Create main container with padding
+        # Create main container with horizontal layout
         main_container = tk.Frame(self.root, bg="#f0f0f0")
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # Create left panel for main controls (increase relative space)
+        left_panel = tk.Frame(main_container, bg="#f0f0f0")
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        # Create right panel for logs (adjust width)
+        right_panel = tk.Frame(main_container, bg="#f0f0f0", width=400)
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
+        right_panel.pack_propagate(False)
+
+        # Simplified header with less space
+        header_frame = tk.Frame(left_panel, bg="#f0f0f0")
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(
+            header_frame,
+            text="Pokemon Pocket Bot ⚔️",
+            font=("Helvetica", 16, "bold"),  # Reduced font size
+            bg="#f0f0f0",
+            fg="#2C3E50",
+        ).pack(pady=5)  # Reduced padding
 
         # Make main_container expand vertically
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        # Header section
-        header_frame = tk.Frame(main_container, bg="#f0f0f0")
-        header_frame.pack(fill=tk.X, pady=(0, 15))
-
-        tk.Label(
-            header_frame,
-            text="Pokemon Pocket Bot ⚔️",
-            font=("Helvetica", 20, "bold"),
-            bg="#f0f0f0",
-            fg="#2C3E50",
-        ).pack(pady=10)
-
         # Create sections with distinct grouping
         # Path Selection Section
-        path_frame = self.create_section_frame(main_container, "Emulator Configuration")
+        path_frame = self.create_section_frame(left_panel, "Emulator Configuration")
 
         self.select_path_button = tk.Button(
             path_frame,
@@ -90,7 +100,7 @@ class BotUI:
         self.selected_emulator_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         # Control Section
-        control_frame = self.create_section_frame(main_container, "Bot Controls")
+        control_frame = self.create_section_frame(left_panel, "Bot Controls")
 
         button_style = {
             "font": ("Helvetica", 10, "bold"),
@@ -120,7 +130,7 @@ class BotUI:
         self.debug_button.pack(side=tk.LEFT, padx=5)
 
         # Screenshot Section
-        screenshot_frame = self.create_section_frame(main_container, "Screenshot Tools")
+        screenshot_frame = self.create_section_frame(left_panel, "Screenshot Tools")
 
         self.screenshot_button = tk.Button(
             screenshot_frame,
@@ -132,14 +142,20 @@ class BotUI:
         )
         self.screenshot_button.pack(side=tk.LEFT, padx=5)
 
+        # Define entry style before region selection section
+        entry_style = {
+            "width": 8,
+            "font": ("Helvetica", 10),
+            "relief": tk.SUNKEN,
+            "bg": "white",
+        }
+
         # Region Selection Section
-        region_frame = self.create_section_frame(main_container, "Region Selection")
+        region_frame = self.create_collapsible_section(left_panel, "Region Selection")
 
-        # Create grid for region inputs
-        entry_style = {"width": 8, "font": ("Helvetica", 10)}
-
+        # Move region selection content to a separate frame
         coords_frame = tk.Frame(region_frame, bg="#f0f0f0")
-        coords_frame.pack(fill=tk.X, pady=5)
+        coords_frame.pack(fill=tk.X)
 
         # Add coordinate inputs with better layout
         for i, (label, var) in enumerate(
@@ -159,17 +175,17 @@ class BotUI:
             setattr(self, f"{var}", entry)
 
         self.region_screenshot_button = tk.Button(
-            region_frame,
+            coords_frame,
             text="Capture Region",
             command=self.take_region_screenshot,
             bg="#9C27B0",
             fg="white",
             **button_style,
         )
-        self.region_screenshot_button.pack(pady=10)
+        self.region_screenshot_button.grid(row=2, column=0, columnspan=4, pady=5)
 
         # Status Section
-        status_frame = self.create_section_frame(main_container, "Status")
+        status_frame = self.create_section_frame(left_panel, "Status")
 
         self.status_label = tk.Label(
             status_frame,
@@ -180,10 +196,77 @@ class BotUI:
         )
         self.status_label.pack(pady=5)
 
+        # Add Game State Display Section with refresh button
+        game_state_frame = self.create_section_frame(left_panel, "Game State Display")
+
+        # Add refresh controls
+        refresh_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        refresh_frame.pack(fill=tk.X, pady=(0, 5))
+
+        self.refresh_button = tk.Button(
+            refresh_frame,
+            text="🔄 Refresh",
+            command=self.update_game_state_display,
+            bg="#4CAF50",
+            fg="white",
+            font=("Helvetica", 9),
+            relief=tk.FLAT,
+        )
+        self.refresh_button.pack(side=tk.LEFT, padx=5)
+
+        self.auto_refresh_var = tk.BooleanVar(value=True)
+        self.auto_refresh_check = tk.Checkbutton(
+            refresh_frame,
+            text="Auto refresh",
+            variable=self.auto_refresh_var,
+            bg="#f0f0f0",
+            font=("Helvetica", 9),
+        )
+        self.auto_refresh_check.pack(side=tk.LEFT)
+
+        # Active Pokémon display at the top
+        active_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        active_frame.pack(fill=tk.X, padx=5, pady=2)
+        tk.Label(
+            active_frame,
+            text="Active Pokémon:",
+            font=("Helvetica", 10, "bold"),
+            bg="#f0f0f0",
+        ).pack(side=tk.LEFT)
+        self.active_text = tk.Text(
+            active_frame, height=2, width=30, font=("Consolas", 9)
+        )
+        self.active_text.pack(fill=tk.X, padx=5)
+
+        # Create two columns for hand and bench
+        columns_frame = tk.Frame(game_state_frame, bg="#f0f0f0")
+        columns_frame.pack(fill=tk.X, expand=True, padx=5, pady=2)
+
+        # Hand column
+        hand_frame = tk.Frame(columns_frame, bg="white", relief=tk.GROOVE, bd=2)
+        hand_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        tk.Label(
+            hand_frame, text="Hand", font=("Helvetica", 10, "bold"), bg="white"
+        ).pack()
+        self.hand_text = tk.Text(hand_frame, height=8, width=20, font=("Consolas", 9))
+        self.hand_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        # Bench column
+        bench_frame = tk.Frame(columns_frame, bg="white", relief=tk.GROOVE, bd=2)
+        bench_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        tk.Label(
+            bench_frame, text="Bench", font=("Helvetica", 10, "bold"), bg="white"
+        ).pack()
+        self.bench_text = tk.Text(bench_frame, height=8, width=20, font=("Consolas", 9))
+        self.bench_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        # Make all text widgets read-only
+        for widget in (self.hand_text, self.active_text, self.bench_text):
+            widget.config(state=tk.DISABLED)
+
         # Log Section
-        log_frame = self.create_section_frame(main_container, "Log")
-        # Make log_frame expand
-        log_frame.pack_configure(fill=tk.BOTH, expand=True)
+        log_frame = self.create_section_frame(right_panel, "Log")
+        log_frame.pack(fill=tk.BOTH, expand=True)
 
         # Create log text with scrollbar
         log_container = tk.Frame(log_frame)
@@ -194,13 +277,17 @@ class BotUI:
 
         self.log_text = tk.Text(
             log_container,
-            font=("Consolas", 10),
+            font=("Consolas", 9),
             bg="white",
-            height=10,  # This becomes the minimum height
-            yscrollcommand=scrollbar.set,
+            width=35,
+            height=40,
+            wrap=tk.WORD,
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.log_text.yview)
+
+        # Start the auto-refresh cycle
+        self.start_auto_refresh()
 
     def create_section_frame(self, parent, title):
         """Helper method to create consistent section frames"""
@@ -215,6 +302,50 @@ class BotUI:
         )
         frame.pack(fill=tk.X, pady=5)
         return frame
+
+    def create_collapsible_section(self, parent, title):
+        """Helper method to create collapsible section frames"""
+        # Create a frame without padding to minimize height
+        frame = tk.LabelFrame(
+            parent,
+            text=title,
+            font=("Helvetica", 11, "bold"),
+            bg="#f0f0f0",
+            fg="#34495E",
+            pady=0,  # Removed padding
+            padx=5,  # Minimal padding
+        )
+        frame.pack(fill=tk.X, pady=1)  # Reduced outer padding
+
+        # Create a container for the content
+        content_frame = tk.Frame(frame, bg="#f0f0f0")
+
+        def toggle_section():
+            if content_frame.winfo_viewable():
+                content_frame.pack_forget()
+                toggle_btn.config(text="▼")
+                # Minimize frame height when collapsed
+                frame.configure(height=20)
+            else:
+                content_frame.pack(fill=tk.X, pady=2)  # Reduced inner padding
+                toggle_btn.config(text="▲")
+                frame.configure(height=0)  # Let it expand naturally when open
+
+        # Make toggle button smaller and more compact
+        toggle_btn = tk.Button(
+            frame,
+            text="▼",
+            command=toggle_section,
+            font=("Helvetica", 6),  # Smaller font
+            width=1,  # Smaller width
+            height=1,  # Smaller height
+            relief=tk.FLAT,
+            padx=1,
+            pady=0,
+        )
+        toggle_btn.pack(side=tk.RIGHT, padx=2, pady=0)
+
+        return content_frame
 
     def toggle_debug_window(self):
         if (
@@ -238,6 +369,8 @@ class BotUI:
     def log_message(self, message):
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
+        # Update game state display whenever we log a message
+        self.update_game_state_display()
 
     def toggle_bot(self):
         if not self.bot_running:
@@ -492,3 +625,54 @@ class BotUI:
         self.log_message(f"UI Selected card: {card['name']}")
         event.set()
         window.destroy()
+
+    def start_auto_refresh(self):
+        """Start the automatic refresh cycle"""
+
+        def refresh_cycle():
+            if self.auto_refresh_var.get():
+                self.update_game_state_display()
+            # Schedule the next refresh in 1 second
+            self.root.after(1000, refresh_cycle)
+
+        # Start the first refresh cycle
+        self.root.after(1000, refresh_cycle)
+
+    def update_game_state_display(self):
+        """Update the game state display with current information"""
+        try:
+            game_state = self.bot.game_state
+
+            # Update hand display
+            self.hand_text.config(state=tk.NORMAL)
+            self.hand_text.delete(1.0, tk.END)
+            for card in game_state.hand_state:
+                self.hand_text.insert(tk.END, f"• {card['name']}\n")
+            self.hand_text.config(state=tk.DISABLED)
+
+            # Update active Pokémon display
+            self.active_text.config(state=tk.NORMAL)
+            self.active_text.delete(1.0, tk.END)
+            for pokemon in game_state.active_pokemon:
+                self.active_text.insert(tk.END, f"⚔️ {pokemon['name']}\n")
+                if "energies" in pokemon:
+                    self.active_text.insert(
+                        tk.END, f"  ⚡ Energy: {pokemon['energies']}\n"
+                    )
+            self.active_text.config(state=tk.DISABLED)
+
+            # Update bench display
+            self.bench_text.config(state=tk.NORMAL)
+            self.bench_text.delete(1.0, tk.END)
+            for slot, pokemon in game_state.bench_pokemon.items():
+                if pokemon:
+                    self.bench_text.insert(tk.END, f"[{slot+1}] {pokemon['name']}\n")
+                    if "energies" in pokemon:
+                        self.bench_text.insert(
+                            tk.END, f"    ⚡ Energy: {pokemon['energies']}\n"
+                        )
+                else:
+                    self.bench_text.insert(tk.END, f"[{slot+1}] Empty\n")
+            self.bench_text.config(state=tk.DISABLED)
+        except Exception as e:
+            print(f"Error updating game state display: {e}")

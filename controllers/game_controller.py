@@ -45,7 +45,7 @@ class GameController:
         self.center_x = 400
         self.center_y = 900
         self.card_start_x = 520
-        self.card_y = 1495
+        self.card_y = 1485
         self.number_of_cards_region = (790, 1325, 60, 50)
         self.debug_window = debug_window
         self.last_screenshot = None
@@ -171,7 +171,7 @@ class GameController:
             self.log_callback("Hand state:")
             for card in self.game_state.hand_state:
                 self.log_callback(f"{card['name']}")
-
+            self.click_bench_pokemons()
             # Add bench state logging here
             self.log_callback("\nBench state:")
             for slot, pokemon in self.game_state.bench_pokemon.items():
