@@ -43,7 +43,7 @@ class GameController:
         self.turn_check_region = (50, 1560, 200, 20)
         self.center_x = 400
         self.center_y = 900
-        self.card_start_x = 510
+        self.card_start_x = 520
         self.card_y = 1500
         self.number_of_cards_region = (790, 1325, 60, 50)
 
@@ -320,24 +320,37 @@ class GameController:
             return False
 
     def can_place_on_bench(self, card):
+        # Count non-None values in bench_pokemon dict
+        occupied_slots = sum(
+            1 for slot in self.game_state.bench_pokemon.values() if slot is not None
+        )
         return (
-            len(self.game_state.bench_pokemon) < 3
+            occupied_slots < 3
             and card["info"].get("level") == 0
             and not card["info"].get("item_card", False)
             and card["name"]
         )
 
     def place_pokemon_on_bench(self, card, start_x):
-        if len(self.game_state.bench_pokemon) >= len(bench_positions):
+        # Find first empty slot
+        empty_slot = next(
+            (
+                idx
+                for idx, pokemon in self.game_state.bench_pokemon.items()
+                if pokemon is None
+            ),
+            None,
+        )
+        if empty_slot is None:
             return False
 
-        bench_position = bench_positions[len(self.game_state.bench_pokemon)]
+        bench_position = bench_positions[empty_slot]
         self.reset_view()
 
         def play_action():
             time.sleep(1)
             self.log_callback(
-                f"Placing card {card['name']} on bench at position {bench_position}..."
+                f"Placing card {card['name']} on bench at position {empty_slot}..."
             )
             drag_position(
                 (start_x, self.card_y),
@@ -346,7 +359,12 @@ class GameController:
             )
 
         if self.verify_card_play(card, start_x, play_action):
-            ##TODO: update bench state based on cards
+            bench_pokemon_info = {
+                "name": card["name"].capitalize(),
+                "info": card["info"],
+                "energies": 0,
+            }
+            self.game_state.bench_pokemon[empty_slot] = bench_pokemon_info
             return True
         else:
             self.log_callback(f"Failed to place {card['name']} on bench")
@@ -354,6 +372,7 @@ class GameController:
             return False
 
     def can_evolve_pokemon(self, card):
+        # Check active pokemon evolution
         if (
             card["info"].get("evolves_from")
             and self.game_state.active_pokemon
@@ -364,11 +383,12 @@ class GameController:
         ):
             return True
 
-        # Add check for bench pokemon evolution
+        # Check bench pokemon evolution
         if card["info"].get("evolves_from"):
-            for bench_pokemon in self.game_state.bench_pokemon:
+            for bench_slot, bench_pokemon in self.game_state.bench_pokemon.items():
                 if (
-                    card["info"]["evolves_from"].lower()
+                    bench_pokemon is not None  # Check if slot is occupied
+                    and card["info"]["evolves_from"].lower()
                     == bench_pokemon["name"].lower()
                 ):
                     return True
@@ -376,16 +396,17 @@ class GameController:
 
     def evolve_pokemon(self, card, start_x):
         # First check if we can evolve any bench pokemon
-        for idx, bench_pokemon in enumerate(self.game_state.bench_pokemon):
+        for slot_idx, bench_pokemon in self.game_state.bench_pokemon.items():
             if (
-                card["info"].get("evolves_from")
+                bench_pokemon is not None  # Check if slot is occupied
+                and card["info"].get("evolves_from")
                 and card["info"]["evolves_from"].lower()
                 == bench_pokemon["name"].lower()
             ):
                 self.log_callback(
                     f"Evolving bench {bench_pokemon['name']} to {card['name']}..."
                 )
-                bench_position = bench_positions[idx]
+                bench_position = bench_positions[slot_idx]
 
                 def play_action():
                     drag_position(
@@ -393,7 +414,7 @@ class GameController:
                     )
 
                 if self.verify_card_play(card, start_x, play_action):
-                    self.game_state.bench_pokemon[idx] = {
+                    self.game_state.bench_pokemon[slot_idx] = {
                         "name": card["name"],
                         "info": card["info"],
                         "energies": bench_pokemon.get("energies", 0),
@@ -408,25 +429,28 @@ class GameController:
                     return False
 
         # If no bench pokemon to evolve, try active pokemon
-        self.log_callback(
-            f"Evolving {self.game_state.active_pokemon[0]['name']} to {card['name']}..."
-        )
+        if self.game_state.active_pokemon:  # Check if there's an active pokemon
+            self.log_callback(
+                f"Evolving {self.game_state.active_pokemon[0]['name']} to {card['name']}..."
+            )
 
-        def play_action():
-            drag_position((start_x, self.card_y), (self.center_x, self.center_y))
+            def play_action():
+                drag_position((start_x, self.card_y), (self.center_x, self.center_y))
 
-        if self.verify_card_play(card, start_x, play_action):
-            self.game_state.active_pokemon[0] = {
-                "name": card["name"],
-                "info": card["info"],
-                "energies": self.game_state.active_pokemon[0].get("energies", 0),
-            }
-            time.sleep(1)
-            return True
-        else:
-            self.log_callback(f"Failed to evolve to {card['name']}")
-            self.game_state.failed_cards.append(card)
-            return False
+            if self.verify_card_play(card, start_x, play_action):
+                self.game_state.active_pokemon[0] = {
+                    "name": card["name"],
+                    "info": card["info"],
+                    "energies": self.game_state.active_pokemon[0].get("energies", 0),
+                }
+                time.sleep(1)
+                return True
+            else:
+                self.log_callback(f"Failed to evolve to {card['name']}")
+                self.game_state.failed_cards.append(card)
+                return False
+
+        return False
 
     def add_energy_to_pokemon(self):
         if not self.running:
@@ -543,7 +567,7 @@ class GameController:
         if not self.running:
             return
         self.log_callback("Checking bench slots...")
-        for idx, bench_position in enumerate(bench_positions):
+        for slot_idx, bench_position in enumerate(bench_positions):
             click_position(bench_position[0], bench_position[1])
             zoomed_card_image = self.battle_controller.get_card(
                 bench_position[0], bench_position[1], 1.25
@@ -553,16 +577,18 @@ class GameController:
                 card_info = self.card_recognition_service.deck_info.get(
                     pokemon_id, default_pokemon_stats
                 )
-                # Update bench pokemon info if it exists
-                if idx < len(self.game_state.bench_pokemon):
-                    self.game_state.bench_pokemon[idx] = {
-                        "name": card_info["name"].capitalize(),
-                        "info": card_info,
-                        "energies": self.game_state.bench_pokemon[idx].get(
-                            "energies", 0
-                        ),
-                    }
-                    self.log_callback(f"Bench Pokemon {idx}: {card_info['name']}")
+                # Update bench pokemon info
+                current_energies = (self.game_state.bench_pokemon[slot_idx] or {}).get(
+                    "energies", 0
+                )
+                self.game_state.bench_pokemon[slot_idx] = {
+                    "name": card_info["name"].capitalize(),
+                    "info": card_info,
+                    "energies": current_energies,
+                }
+                self.log_callback(f"Bench Pokemon {slot_idx}: {card_info['name']}")
+            else:
+                self.game_state.bench_pokemon[slot_idx] = None
             time.sleep(0.55)
             self.reset_view()
 
