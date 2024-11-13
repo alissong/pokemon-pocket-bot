@@ -1,6 +1,8 @@
 # src/controllers/emulator_controller.py
 
+import os
 import subprocess
+import time
 
 from utils.adb_utils import connect_to_emulator
 
@@ -42,3 +44,19 @@ class EmulatorController:
                 self.log_callback("Connected to emulator")
             else:
                 self.log_callback("Failed to connect to emulator.")
+
+    def restart_emulator(self):
+        try:
+            self.log_callback("Closing emulator...")
+            subprocess.run(["adb", "shell", "reboot"])
+            time.sleep(5)
+            self.log_callback("Starting emulator...")
+            emulator_path = self.app_state.program_path
+            if emulator_path:
+                # Adjust the command based on how you start your emulator
+                subprocess.Popen([os.path.join(emulator_path, "dnplayer.exe")])
+                time.sleep(10)  # Wait for emulator to start
+            else:
+                self.log_callback("Emulator path not set. Cannot restart emulator.")
+        except Exception as e:
+            self.log_callback(f"Error restarting emulator: {e}")

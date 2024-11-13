@@ -11,12 +11,12 @@ class BattleController:
         self.template_images = template_images
         self.card_images = card_images
 
-    def check_turn(self, turn_check_region, running, game_state):
+    def check_turn(self, turn_check_region, running_event, game_state):
         is_your_turn = False
         is_first_turn = False
         go_first = False
         self.log_callback("Checking turn...")
-        if not running:
+        if not running_event.is_set():
             return is_your_turn, is_first_turn, go_first
         screenshot1 = self.image_processor.capture_region(turn_check_region)
         time.sleep(1)
@@ -56,13 +56,14 @@ class BattleController:
 
         return is_your_turn, is_first_turn, go_first
 
-    def perform_search_battle_actions(self, running, stop, run_event=False):
+    def perform_search_battle_actions(self, running_event, run_event=False):
+        if not running_event.is_set():
+            return
         time.sleep(1)
         if not self.image_processor.check_and_click_until_found(
             self.template_images.get("VERSUS_SCREEN"),
             "Versus Screen",
-            running,
-            stop,
+            running_event,
             max_attempts=10,
         ):
             return False
@@ -70,15 +71,13 @@ class BattleController:
             if not self.image_processor.check_and_click_until_found(
                 self.template_images.get("EVENT_MATCH_SCREEN"),
                 "Event Match Screen",
-                running,
-                stop,
+                running_event,
                 max_attempts=10,
             ):
                 if not self.image_processor.check_and_click_until_found(
                     self.template_images.get("RANDOM_MATCH_SCREEN"),
                     "Random Match Screen",
-                    running,
-                    stop,
+                    running_event,
                     max_attempts=10,
                 ):
                     return False
@@ -86,22 +85,21 @@ class BattleController:
             if not self.image_processor.check_and_click_until_found(
                 self.template_images.get("RANDOM_MATCH_SCREEN"),
                 "Random Match Screen",
-                running,
-                stop,
+                running_event,
                 max_attempts=10,
             ):
                 return False
         if not self.image_processor.check_and_click_until_found(
             self.template_images.get("BATTLE_BUTTON"),
             "Battle Button",
-            running,
-            stop,
+            running_event,
             max_attempts=10,
         ):
             return False
 
-    def check_rival_concede(self, screenshot, running, stop):
-        ## TODO: check if need call to this function
+    def check_rival_concede(self, screenshot, running_event):
+        if not running_event.is_set():
+            return
         self.log_callback("Checking if the rival conceded...")
         if self.image_processor.check(
             screenshot,
@@ -115,13 +113,12 @@ class BattleController:
                 if not self.image_processor.check_and_click_until_found(
                     self.template_images.get(key),
                     f"{key.replace('_', ' ').title()}",
-                    running,
-                    stop,
+                    running_event,
                 ):
                     break
             time.sleep(2)
             self.image_processor.check_and_click_until_found(
-                self.template_images.get("CROSS_BUTTON"), "Cross button", running, stop
+                self.template_images.get("CROSS_BUTTON"), "Cross button", running_event
             )
             time.sleep(4)
         else:

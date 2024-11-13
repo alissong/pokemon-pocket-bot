@@ -1,14 +1,8 @@
-# src/controllers/game_controller.py
-
 import threading
 import time
 
-from utils.adb_utils import click_position, drag_position, take_screenshot
-from utils.constants import (
-    bench_positions,
-    card_offset_mapping,
-    default_pokemon_stats,  # Add this import
-)
+from utils.adb_utils import click_position, drag_first_y, drag_position, take_screenshot
+from utils.constants import bench_positions, card_offset_mapping, default_pokemon_stats
 
 card_effects = {
     "professor's research": lambda hand_size: 2,  # Draw 2 (+2)
@@ -37,7 +31,7 @@ class GameController:
         self.game_state = game_state
         self.template_images = template_images
         self.log_callback = log_callback
-        self.running = False
+        self.running_event = threading.Event()  # Use threading.Event
 
         ## COORDS
         self.zoom_card_region = (80, 255, 740, 1020)
@@ -54,25 +48,31 @@ class GameController:
         if not self.app_state.program_path:
             self.log_callback("Please select emulator path first.")
             return
-        self.running = True
+        self.running_event.set()  # Set the event to indicate running
         threading.Thread(target=self.run).start()
 
     def stop(self):
-        self.running = False
+        self.running_event.clear()  # Clear the event to stop the bot
 
     def run(self):
         self.emulator_controller.connect_and_run()
-        while self.running:
-            self.prepare_for_battle()
-            self.navigate_to_battle()
-            self.start_battle()
-            self.handle_battle()
-            self.end_battle()
+        while self.running_event.is_set():
+            try:
+                # Normal bot operations
+                self.prepare_for_battle()
+                self.navigate_to_battle()
+                self.start_battle()
+                self.handle_battle()
+                self.end_battle()
+            except Exception as e:
+                self.log_callback(f"An error occurred: {e}")
 
     def prepare_for_battle(self):
         self.game_state.reset()
 
     def navigate_to_battle(self):
+        if not self.running_event.is_set():
+            return
         screenshot = take_screenshot()
         if not self.image_processor.check_and_click(
             screenshot,
@@ -84,33 +84,32 @@ class GameController:
             )
         time.sleep(4)
         self.battle_controller.perform_search_battle_actions(
-            self.running, self.stop, run_event=True
+            self.running_event, run_event=True
         )
 
     def start_battle(self):
+        if not self.running_event.is_set():
+            return
         self.image_processor.check_and_click_until_found(
             self.template_images["TIME_LIMIT_INDICATOR"],
             "Time limit indicator",
-            self.running,
-            self.stop,
+            self.running_event,
         )
         time.sleep(3)
 
     def handle_battle(self):
-        while self.running:
+        while self.running_event.is_set():
             screenshot = take_screenshot()
             if self.is_battle_over(screenshot) or self.next_step_available(screenshot):
                 break
 
             self.battle_controller.check_rival_afk(screenshot)
             # Add check for rival concede
-            self.battle_controller.check_rival_concede(
-                screenshot, self.running, self.stop
-            )
+            self.battle_controller.check_rival_concede(screenshot, self.running_event)
 
             is_turn, self.game_state.is_first_turn, self.game_state.go_first = (
                 self.battle_controller.check_turn(
-                    self.turn_check_region, self.running, self.game_state
+                    self.turn_check_region, self.running_event, self.game_state
                 )
             )
             if not self.game_state.is_first_turn:
@@ -132,8 +131,7 @@ class GameController:
                     self.image_processor.check_and_click_until_found(
                         self.template_images.get("START_BATTLE_BUTTON"),
                         "Start battle button",
-                        self.running,
-                        self.stop,
+                        self.running_event,
                         similarity_threshold=0.5,
                         max_attempts=10,
                     )
@@ -145,7 +143,10 @@ class GameController:
                 self.log_callback("Waiting for opponent's turn...")
                 time.sleep(1)
 
+    # Update methods to check self.running_event.is_set()
     def update_game_state(self, cards_delta=0):
+        if not self.running_event.is_set():
+            return
         self.reset_view()
         self.check_number_of_cards(cards_delta)
         self.reset_view()
@@ -161,7 +162,7 @@ class GameController:
             self.game_state.hand_state = []
 
     def play_turn(self):
-        if not self.running:
+        if not self.running_event.is_set():
             return
         self.log_callback("Start playing my turn...")
 
@@ -193,15 +194,27 @@ class GameController:
             self.try_attack()
 
     def process_hand_cards(self, recursion_level=0):
+        if not self.running_event.is_set():
+            return
         # Prevent infinite recursion
         if recursion_level >= 10:  # Safety limit
             self.log_callback("Maximum card processing depth reached")
+            return
+
+        # Turn check before processing cards
+        is_turn, _, _ = self.battle_controller.check_turn(
+            self.turn_check_region, self.running_event, self.game_state
+        )
+        if not is_turn:
+            self.log_callback("Turn ended while processing cards, stopping...")
             return
 
         card_offset_x = card_offset_mapping.get(self.game_state.number_of_cards, 20)
         hand_changed = False
 
         for card in self.game_state.hand_state:
+            if not self.running_event.is_set():
+                return
             if card in self.game_state.failed_cards:
                 continue
             card_delta = 0
@@ -218,9 +231,6 @@ class GameController:
                     f"Skipping trainer card {card['name']} because we already played 2"
                 )
                 continue
-
-            if not self.running:
-                return
 
             start_x = self.card_start_x - (card["position"] * card_offset_x)
             if card["info"].get("item_card"):
@@ -250,15 +260,13 @@ class GameController:
             self.reset_view()
             self.update_game_state(cards_delta=card_delta)
             # Only recurse if we still have cards to process
-            if (
-                self.game_state.hand_state
-            ):  ##TODO: maybe check turn again to prevent miss screenshots of the hand
+            if self.game_state.hand_state:
                 self.process_hand_cards(recursion_level + 1)
         if recursion_level == 0:
             self.game_state.played_trainer_cards = 0
             self.game_state.failed_cards = []
 
-    def verify_card_play(self, card, start_x, action_func):
+    def verify_card_play(self, card, action_func):
         """
         Verifies if a card was successfully played.
 
@@ -300,10 +308,10 @@ class GameController:
         # Define the card play action
         def play_action():
             time.sleep(1)
-            self.drag((start_x, self.card_y), (self.center_x, self.center_y))
+            self.drag_first_y((start_x, self.card_y), (self.center_x, self.center_y))
 
         # Attempt to play the card and verify success
-        if self.verify_card_play(card, start_x, play_action):
+        if self.verify_card_play(card, play_action):
             self.game_state.played_trainer_cards += 1
             # Calculate card effect
             effect_func = card_effects.get(card_name_lower)
@@ -330,7 +338,7 @@ class GameController:
             time.sleep(0.7)
             self.drag((start_x, self.card_y), (self.center_x, self.center_y - 50))
 
-        if self.verify_card_play(card, start_x, play_action):
+        if self.verify_card_play(card, play_action):
             self.game_state.active_pokemon.append(card)
             time.sleep(1)
             self.log_callback("Battle Start!")
@@ -373,11 +381,11 @@ class GameController:
             self.log_callback(
                 f"Placing card {card['name']} on bench at position {empty_slot}..."
             )
-            self.drag(
+            self.drag_first_y(
                 (start_x, self.card_y), (bench_position[0], bench_position[1]), 1.25
             )
 
-        if self.verify_card_play(card, start_x, play_action):
+        if self.verify_card_play(card, play_action):
             bench_pokemon_info = {
                 "name": card["name"].capitalize(),
                 "info": card["info"],
@@ -428,11 +436,13 @@ class GameController:
                 bench_position = bench_positions[slot_idx]
 
                 def play_action():
-                    self.drag(
+                    self.drag_first_y(
                         (start_x, self.card_y), (bench_position[0], bench_position[1])
                     )
 
-                if self.verify_card_play(card, start_x, play_action):
+                if self.verify_card_play(
+                    card, play_action
+                ):  # TODO here start_x must come from hand position of the card
                     self.game_state.bench_pokemon[slot_idx] = {
                         "name": card["name"],
                         "info": card["info"],
@@ -454,9 +464,11 @@ class GameController:
             )
 
             def play_action():
-                self.drag((start_x, self.card_y), (self.center_x, self.center_y))
+                self.drag_first_y(
+                    (start_x, self.card_y), (self.center_x, self.center_y)
+                )
 
-            if self.verify_card_play(card, start_x, play_action):
+            if self.verify_card_play(card, play_action):
                 self.game_state.active_pokemon[0] = {
                     "name": card["name"],
                     "info": card["info"],
@@ -472,7 +484,7 @@ class GameController:
         return False
 
     def add_energy_to_pokemon(self):
-        if not self.running:
+        if not self.running_event.is_set():
             return
         self.drag((750, 1450), (self.center_x, self.center_y), 0.3)
 
@@ -491,7 +503,7 @@ class GameController:
         self.reset_view()
 
     def end_turn(self):
-        if not self.running:
+        if not self.running_event.is_set():
             return
         self.try_attack()
         self.reset_view()
@@ -507,6 +519,8 @@ class GameController:
         self.game_state.is_first_turn = False  # Ensure we reset the first turn flag
 
     def end_battle(self):
+        if not self.running_event.is_set():
+            return
         time.sleep(4)
         screenshot = take_screenshot()
         if self.image_processor.check_and_click(
@@ -516,6 +530,8 @@ class GameController:
 
         max_attempts = 5
         for _ in range(max_attempts):
+            if not self.running_event.is_set():
+                return
             screenshot = take_screenshot()
             if self.image_processor.check_and_click(
                 screenshot, self.template_images["NEXT_BUTTON"], "Next button"
@@ -525,6 +541,8 @@ class GameController:
             time.sleep(1)
 
         for _ in range(max_attempts):
+            if not self.running_event.is_set():
+                return
             screenshot = take_screenshot()
             if self.image_processor.check_and_click(
                 screenshot, self.template_images["THANKS_BUTTON"], "Thanks button"
@@ -571,7 +589,7 @@ class GameController:
                 f"Adjusted number of cards by delta: {cards_delta}, new total: {self.game_state.number_of_cards}"
             )
             return
-        if not self.running:
+        if not self.running_event.is_set():
             return
         self.game_state.number_of_cards = None
         n_cards = self.battle_controller.check_number_of_cards(500, 1500)
@@ -583,7 +601,7 @@ class GameController:
         self.click(0, 1350, include_debug=False)
 
     def click_bench_pokemons(self):
-        if not self.running:
+        if not self.running_event.is_set():
             return
         self.log_callback("Checking bench slots...")
         for slot_idx, bench_position in enumerate(bench_positions):
@@ -650,4 +668,9 @@ class GameController:
             duration,
             debug_window=self.debug_window,
             screenshot=self.last_screenshot,
+        )
+
+    def drag_first_y(self, start_pos, end_pos, duration=0.5):
+        drag_first_y(
+            start_pos, end_pos, duration, self.debug_window, self.last_screenshot
         )

@@ -5,8 +5,8 @@ from PIL import Image, ImageDraw, ImageTk
 
 # Window Configuration
 DEFAULT_IMAGE_SIZE = (800, 600)
-SCREEN_WIDTH_RATIO = 0.4  # 40% of screen width
-SCREEN_HEIGHT_RATIO = 0.8  # 80% of screen height
+SCREEN_WIDTH_RATIO = 0.3  # 40% of screen width
+SCREEN_HEIGHT_RATIO = 0.9  # 80% of screen height
 PANED_WINDOW_RATIO = 0.3  # 30% of width for action list
 WINDOW_PADDING = 20  # Padding for image display
 

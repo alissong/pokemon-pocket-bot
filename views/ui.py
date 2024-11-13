@@ -50,7 +50,7 @@ CARD_PROMPT_CONFIG = {
 }
 
 CARD_OPTIONS_CONFIG = {
-    "window_size": "800x600",
+    "window_size": "700x700",
     "columns": 3,
     "card_dimensions": (150, 210),  # width, height
     "max_zoomed_height": 200,
@@ -78,6 +78,9 @@ class BotUI:
 
         self.setup_ui()
         self.load_configs()
+
+        # Bind the window close event
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def setup_ui(self):
         # Update window size
@@ -732,3 +735,12 @@ class BotUI:
             self.bench_text.config(state=tk.DISABLED)
         except Exception as e:
             print(f"Error updating game state display: {e}")
+
+    def on_closing(self):
+        if self.bot_running:
+            self.bot.stop()
+            self.bot_running = False
+        # Set the event to prevent blocking
+        if self.card_name_event:
+            self.card_name_event.set()
+        self.root.destroy()

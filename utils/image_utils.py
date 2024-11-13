@@ -1,5 +1,3 @@
-# src/utils/image_utils.py
-
 import time
 
 import cv2
@@ -28,12 +26,36 @@ class ImageProcessor:
         ]
 
     def calculate_similarity(self, img1, img2):
-        if img1.shape != img2.shape:
+        # Check if either image is None or empty
+        if img1 is None or img2 is None:
+            self.log_callback(
+                "Warning: One or both images are None in calculate_similarity"
+            )
             return 0
-        img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-        img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-        score, _ = ssim(img1_gray, img2_gray, full=True)
-        return score
+
+        if img1.size == 0 or img2.size == 0:
+            self.log_callback(
+                "Warning: One or both images are empty in calculate_similarity"
+            )
+            return 0
+
+        if img1.shape != img2.shape:
+            self.log_callback(
+                f"Warning: Image shapes don't match - {img1.shape} vs {img2.shape}"
+            )
+            return 0
+
+        try:
+            img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+            img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+            score, _ = ssim(img1_gray, img2_gray, full=True)
+            return score
+        except cv2.error as e:
+            self.log_callback(f"OpenCV error in calculate_similarity: {e}")
+            return 0
+        except Exception as e:
+            self.log_callback(f"Unexpected error in calculate_similarity: {e}")
+            return 0
 
     def extract_number_from_image(self, image):
         grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -45,9 +67,15 @@ class ImageProcessor:
     def capture_region(self, region):
         x, y, w, h = region
         screenshot = take_screenshot()
+        if screenshot is None:
+            self.log_callback("Failed to capture screenshot in capture_region")
+            return None
         return screenshot[y : y + h, x : x + w]
 
     def check(self, screenshot, template_image, log_message, similarity_threshold=0.8):
+        if screenshot is None:
+            self.log_callback("Screenshot is None in check method")
+            return False
         _, similarity = find_subimage(screenshot, template_image)
         if log_message:
             log_message = (
@@ -62,15 +90,20 @@ class ImageProcessor:
         self,
         template_image,
         log_message,
-        running,
-        stop,
+        running_event,
         similarity_threshold=0.8,
         max_attempts=50,
     ):
         attempts = 0
 
-        while running:
+        while running_event.is_set():
             screenshot = take_screenshot()
+            if screenshot is None:
+                self.log_callback(
+                    "Failed to take screenshot in check_and_click_until_found"
+                )
+                time.sleep(0.5)
+                continue
             position, similarity = find_subimage(screenshot, template_image)
             self.log_callback(f"Searching... {log_message} - {similarity:.2f}")
 
@@ -94,6 +127,9 @@ class ImageProcessor:
     def check_and_click(
         self, screenshot, template_image, log_message, similarity_threshold=0.8
     ):
+        if screenshot is None:
+            self.log_callback("Screenshot is None in check_and_click")
+            return False
         position, similarity = find_subimage(screenshot, template_image)
         if similarity > similarity_threshold:
             if log_message:
