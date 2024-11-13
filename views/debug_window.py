@@ -42,6 +42,7 @@ class DebugWindow:
         self.images = []
         self.current_index = None
         self.image_size = DEFAULT_IMAGE_SIZE
+        self.auto_follow = True
 
     def open_window(self, main_x=None, main_y=None, main_height=None):
         if self.window is not None:
@@ -145,15 +146,27 @@ class DebugWindow:
         self.action_listbox.insert(tk.END, action_description)
         self.images.append(image)
 
+        # Auto-select last item if auto_follow is enabled
+        if self.auto_follow:
+            last_index = self.action_listbox.size() - 1
+            self.action_listbox.select_clear(0, tk.END)
+            self.action_listbox.select_set(last_index)
+            self.action_listbox.see(last_index)
+            self.on_action_select(None)
+
     def on_window_resize(self, event):
         if event.widget == self.window:
-            # Update image size based on frame size
-            frame_width = self.image_frame.winfo_width()
-            frame_height = self.image_frame.winfo_height()
+            # Update image size based on frame size with minimum size protection
+            frame_width = max(
+                self.image_frame.winfo_width(), 100
+            )  # Minimum 100px width
+            frame_height = max(
+                self.image_frame.winfo_height(), 100
+            )  # Minimum 100px height
             self.image_size = (
-                frame_width - WINDOW_PADDING,
-                frame_height - WINDOW_PADDING,
-            )  # Padding
+                max(frame_width - WINDOW_PADDING, 1),  # Ensure at least 1px
+                max(frame_height - WINDOW_PADDING, 1),  # Ensure at least 1px
+            )
 
             # Refresh current image if one is selected
             if self.current_index is not None:
@@ -162,7 +175,13 @@ class DebugWindow:
     def on_action_select(self, event):
         if not self.action_listbox.curselection():
             return
+
         index = self.action_listbox.curselection()[0]
+        last_index = self.action_listbox.size() - 1
+
+        # Update auto_follow based on whether the last item is selected
+        self.auto_follow = index == last_index
+
         self.current_index = index
         action_description, image, action_coords = self.actions[index]
 
@@ -176,14 +195,13 @@ class DebugWindow:
             target_width, target_height = self.image_size
             target_aspect = target_width / target_height
 
+            # Ensure minimum dimensions
             if aspect_ratio > target_aspect:
-                # Width limited
-                new_width = target_width
-                new_height = int(target_width / aspect_ratio)
+                new_width = max(target_width, 1)
+                new_height = max(int(target_width / aspect_ratio), 1)
             else:
-                # Height limited
-                new_height = target_height
-                new_width = int(target_height * aspect_ratio)
+                new_height = max(target_height, 1)
+                new_width = max(int(target_height * aspect_ratio), 1)
 
             # First resize the image
             display_image = pil_image.resize(
