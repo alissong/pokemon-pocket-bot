@@ -8,6 +8,37 @@ from threading import Thread
 import cv2
 
 
+def get_input_device():
+    try:
+        # First check if we can access the devices list
+        result = subprocess.run(
+            ["adb", "shell", "cat", "/proc/bus/input/devices"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode == 0:
+            # Look for the virtual input device that handles both kbd and mouse
+            lines = result.stdout.splitlines()
+            current_device = None
+            for line in lines:
+                if line.startswith("N: Name="):
+                    if "input" in line.lower():
+                        current_device = "/dev/input/event2"
+                        break
+
+            if current_device:
+                return current_device
+
+        # Fallback to event2 as it's the known working device from the device list
+        return "/dev/input/event2"
+
+    except Exception as e:
+        print(f"Error finding input device: {e}")
+        return "/dev/input/event2"  # Default to event2 based on your device list
+
+
 def connect_to_emulator(emulator_name):
     subprocess.run(["adb", "connect", emulator_name])
 
@@ -108,86 +139,71 @@ def drag_position(start_pos, end_pos, duration=0.5, debug_window=None, screensho
     )
 
 
-def drag_points(points, duration=1.0, debug_window=None, screenshot=None):
+def send_event(device, type, code, value):
+    subprocess.run(
+        ["adb", "shell", "sendevent", device, str(type), str(code), str(value)]
+    )
+
+
+def drag_points(points, duration=1.0, device=None):
     """
     Perform a drag operation through multiple points.
 
     Args:
         points: List of (x, y) tuples representing the points to drag through
         duration: Total duration of the entire drag operation in seconds
-        debug_window: Debug window object for logging
-        screenshot: Optional screenshot for debug logging
+        device: The input device path (will be auto-detected if None)
     """
+    if device is None:
+        device = get_input_device()  # Confirm this resolves correctly
+
     if len(points) < 2:
         raise ValueError("At least 2 points are required for a drag operation")
 
-    # Log the action if debug window is available
-    if debug_window and debug_window.window is not None:
-        if screenshot is None:
-            screenshot = take_screenshot()
-        action_coords = {"type": "multipoint_drag", "coords": points}
-        points_str = " -> ".join([f"({x}, {y})" for x, y in points])
-        debug_window.log_action(
-            f"Drag through points: {points_str}", screenshot, action_coords
-        )
+    # Delay between points
+    delay = duration / (len(points) - 1)
 
-    # Calculate duration for each segment
-    segment_duration = duration / (len(points) - 1)
-    segment_duration_ms = int(segment_duration * 1000)
+    # Start the touch
+    send_event(device, 3, 57, 0)  # EV_ABS, ABS_MT_TRACKING_ID, 0
+    x, y = points[0]
+    send_event(device, 3, 53, x)  # EV_ABS, ABS_MT_POSITION_X, x
+    send_event(device, 3, 54, y)  # EV_ABS, ABS_MT_POSITION_Y, y
+    send_event(device, 0, 0, 0)  # EV_SYN, SYN_REPORT, 0
+    print(f"Start at ({x}, {y})")  # Debug log
 
-    # Perform drag operations through each consecutive pair of points
-    for i in range(len(points) - 1):
-        start_x, start_y = points[i]
-        end_x, end_y = points[i + 1]
+    time.sleep(delay)
 
-        subprocess.run(
-            [
-                "adb",
-                "shell",
-                "input",
-                "swipe",
-                str(start_x),
-                str(start_y),
-                str(end_x),
-                str(end_y),
-                str(segment_duration_ms),
-            ]
-        )
+    # Move through intermediate points
+    for i, (x, y) in enumerate(points[1:], start=1):
+        send_event(device, 3, 53, x)  # EV_ABS, ABS_MT_POSITION_X, x
+        send_event(device, 3, 54, y)  # EV_ABS, ABS_MT_POSITION_Y, y
+        send_event(device, 0, 0, 0)  # EV_SYN, SYN_REPORT, 0
+        print(f"Move to ({x}, {y}), point {i}")  # Debug log
+        time.sleep(delay)
+
+    # End the touch
+    send_event(device, 3, 57, -1)  # EV_ABS, ABS_MT_TRACKING_ID, -1
+    send_event(device, 0, 0, 0)  # EV_SYN, SYN_REPORT, 0
+    print("End touch")  # Debug log
 
 
 def drag_first_y(start_pos, end_pos, duration=0.5, debug_window=None, screenshot=None):
     """
-    Performs a drag operation by moving vertically first, then horizontally.
-
-    Args:
-        start_pos: Tuple of (start_x, start_y)
-        end_pos: Tuple of (end_x, end_y)
-        duration: Duration of the drag in seconds
-        debug_window: Debug window object for logging
-        screenshot: Optional screenshot for debug logging
+    Performs a drag operation through three sequential touch points.
     """
-    start_x, start_y = start_pos
-    end_x, end_y = end_pos
-    duration_ms = int((duration * 1000) / 2)  # Split duration between the two movements
+    x1, y1 = start_pos
+    x3, y3 = end_pos
+    # Second point keeps x1 but uses y3 (vertical movement first)
+    x2, y2 = x1, y3
 
+    points = [(x1, y1), (x2, y2), (x3, y3)]
     # Log the action if debug window is available
     if debug_window and debug_window.window is not None:
         if screenshot is None:
             screenshot = take_screenshot()
-        intermediate_point = (start_x, end_y)
-        points = [start_pos, intermediate_point, end_pos]
         action_coords = {"type": "drag_first_y", "coords": points}
         points_str = " -> ".join([f"({x}, {y})" for x, y in points])
         debug_window.log_action(
-            f"Drag Y-first through points: {points_str}", screenshot, action_coords
+            f"Drag through points: {points_str}", screenshot, action_coords
         )
-
-    # First move: Vertical (y-axis)
-    intermediate_point = (start_x, end_y)
-
-    # Execute both movements sequentially without shell quotes
-    command = (
-        f"adb shell input swipe {start_x} {start_y} {intermediate_point[0]} {intermediate_point[1]} {duration_ms} "
-        f"& adb shell input swipe {intermediate_point[0]} {intermediate_point[1]} {end_x} {end_y} {duration_ms}"
-    )
-    subprocess.run(command, shell=True)
+    drag_points(points, duration)

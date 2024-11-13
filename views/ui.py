@@ -415,10 +415,20 @@ class BotUI:
             self.selected_emulator_label.config(text=self.app_state.program_path)
 
     def log_message(self, message):
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        # Update game state display whenever we log a message
-        self.update_game_state_display()
+        """Thread-safe logging method"""
+        if not self.root.winfo_exists():
+            return
+
+        def _log():
+            if not self.root.winfo_exists():
+                return
+            self.log_text.insert(tk.END, message + "\n")
+            self.log_text.see(tk.END)
+            # Update game state display whenever we log a message
+            self.update_game_state_display()
+
+        # Schedule the log update on the main thread
+        self.root.after(0, _log)
 
     def toggle_bot(self):
         if not self.bot_running:

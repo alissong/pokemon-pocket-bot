@@ -19,13 +19,15 @@ class BattleController:
         if not running_event.is_set():
             return is_your_turn, is_first_turn, go_first
         screenshot1 = self.image_processor.capture_region(turn_check_region)
-        time.sleep(1)
+        time.sleep(1.1)
         screenshot2 = self.image_processor.capture_region(turn_check_region)
 
         similarity = self.image_processor.calculate_similarity(screenshot1, screenshot2)
         if similarity < 0.95:
-            self.log_callback("It's your turn! Taking action...")
+            self.log_callback(f"It's your turn! {similarity}")
             is_your_turn = True
+        else:
+            self.log_callback(f"Not your turn! {similarity}")
         if not game_state.first_turn_done:
             screenshot = take_screenshot()
             go_first = self.image_processor.check(

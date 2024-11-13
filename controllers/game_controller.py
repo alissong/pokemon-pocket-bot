@@ -1,7 +1,7 @@
 import threading
 import time
 
-from utils.adb_utils import click_position, drag_first_y, drag_position, take_screenshot
+from utils.adb_utils import click_position, drag_position, take_screenshot
 from utils.constants import bench_positions, card_offset_mapping, default_pokemon_stats
 
 card_effects = {
@@ -114,7 +114,7 @@ class GameController:
             )
             if not self.game_state.is_first_turn:
                 # Handle situations like defeated Pokémon or special cards
-                self.click_bench_pokemons()
+                self.click_bench_positions()
                 self.check_active_pokemon()
                 self.reset_view()
 
@@ -136,6 +136,9 @@ class GameController:
                         max_attempts=10,
                     )
                     self.game_state.first_turn_done = True
+            else:
+                self.click_bench_positions()
+
             if self.game_state.go_first and self.game_state.first_turn_done:
                 self.game_state.go_first = False
                 self.log_callback("Played first!")
@@ -173,7 +176,7 @@ class GameController:
             self.log_callback("Hand state:")
             for card in self.game_state.hand_state:
                 self.log_callback(f"{card['name']}")
-            self.click_bench_pokemons()
+            self.check_bench_cards()
             # Add bench state logging here
             self.log_callback("\nBench state:")
             for slot, pokemon in self.game_state.bench_pokemon.items():
@@ -268,38 +271,86 @@ class GameController:
 
     def verify_card_play(self, card, action_func):
         """
-        Verifies if a card was successfully played.
+        Verifies if a card with the same name was successfully played.
 
         Args:
             card: The card being played
-            start_x: Starting x position for the card
             action_func: Function that performs the actual card play action
 
         Returns:
-            bool: True if card was successfully played, False otherwise
+            bool: True if the card was successfully played, False otherwise
         """
-        # Store the initial card state
-        initial_position = card["position"]
-        initial_card_id, _ = self.card_recognition_service.check_specific_card(
-            initial_position,
-            self.card_start_x,
-            self.card_y,
-            self.game_state.number_of_cards,
-        )
+        # Step 1: Get initial positions of identical cards in hand
+        card_name = card["name"]
+        played_card_id = card["info"]["id"]
+
+        initial_positions = [
+            card_info["position"]
+            for card_info in self.game_state.hand_state
+            if card_info["name"] == card_name
+        ]
 
         # Perform the card play action
         action_func()
-        time.sleep(4)  # Wait for animation
+        time.sleep(3)  # Wait for animation to complete
 
-        # Verify the card was played by checking if it changed
-        new_card_id, _ = self.card_recognition_service.check_specific_card(
-            initial_position,
+        # Step 2: Calculate expected new position(s) of identical card(s) after play
+        remaining_positions = [
+            pos for pos in initial_positions if pos != card["position"]
+        ]
+        for initial_position in initial_positions:
+            new_card_id, _ = self.card_recognition_service.check_specific_card(
+                initial_position,
+                self.card_start_x,
+                self.card_y,
+                self.game_state.number_of_cards,
+            )
+
+            if new_card_id == played_card_id:
+                return False
+
+        if not remaining_positions:
+            # If no more cards with the same name should remain, the play was successful
+            self.log_callback(f"Played card {card['name']} successfully")
+            return True
+
+        # Step 3: Check nearby positions to confirm if a duplicate card moved
+
+        left_card_id, _ = self.card_recognition_service.check_specific_card(
+            remaining_positions[0] - 1,
             self.card_start_x,
             self.card_y,
-            self.game_state.number_of_cards,
+            self.game_state.number_of_cards - 1,
         )
+        match_count = 0
+        if left_card_id and left_card_id == played_card_id:
+            match_count += 1
+        right_card_id, _ = self.card_recognition_service.check_specific_card(
+            remaining_positions[0] + 1,
+            self.card_start_x,
+            self.card_y,
+            self.game_state.number_of_cards - 1,
+        )
+        if right_card_id and right_card_id == played_card_id:
+            match_count += 1
+        center_card_id, _ = self.card_recognition_service.check_specific_card(
+            remaining_positions[0],
+            self.card_start_x,
+            self.card_y,
+            self.game_state.number_of_cards - 1,
+        )
+        if center_card_id and center_card_id == played_card_id:
+            match_count += 1
 
-        return new_card_id != initial_card_id
+        # Step 4: Verify if either nearby position contains the expected card ID
+        if match_count <= 1:
+            self.log_callback(f"Played card {card['name']} successfully")
+            return True  # The card was successfully played
+        else:
+            self.log_callback(
+                f"Card {card['name']} is still in hand, play was unsuccessful"
+            )
+            return False  # The card is still in hand, play was unsuccessful
 
     def play_trainer_card(self, card, start_x):
         self.log_callback(f"Playing trainer card: {card['name']}...")
@@ -392,6 +443,7 @@ class GameController:
                 "energies": 0,
             }
             self.game_state.bench_pokemon[empty_slot] = bench_pokemon_info
+            self.log_callback(f"Updated bench slot {empty_slot} with {card['name']}")
             return True
         else:
             self.log_callback(f"Failed to place {card['name']} on bench")
@@ -507,12 +559,12 @@ class GameController:
             return
         self.try_attack()
         self.reset_view()
-        time.sleep(0.25)
+        time.sleep(0.35)
         screenshot = take_screenshot()
         self.image_processor.check_and_click(
             screenshot, self.template_images["END_TURN"], "End turn"
         )
-        time.sleep(0.25)
+        time.sleep(0.35)
         self.image_processor.check_and_click(
             screenshot, self.template_images["OK"], "Ok"
         )
@@ -600,10 +652,11 @@ class GameController:
         self.click(0, 1350, include_debug=False)
         self.click(0, 1350, include_debug=False)
 
-    def click_bench_pokemons(self):
+    def check_bench_cards(self):
+        """Full bench check that identifies cards and updates game state"""
         if not self.running_event.is_set():
             return
-        self.log_callback("Checking bench slots...")
+        self.log_callback("Checking bench cards...")
         for slot_idx, bench_position in enumerate(bench_positions):
             self.click(bench_position[0], bench_position[1])
             zoomed_card_image = self.battle_controller.get_card(
@@ -627,6 +680,19 @@ class GameController:
             else:
                 self.game_state.bench_pokemon[slot_idx] = None
             self.reset_view()
+
+    def click_bench_positions(self):
+        """Simply clicks all bench positions and active pokemon spot without checking cards"""
+        if not self.running_event.is_set():
+            return
+        self.log_callback("Clicking bench positions...")
+        # Click bench positions
+        for bench_position in bench_positions:
+            self.click(bench_position[0], bench_position[1])
+            self.reset_view()
+        # Click active pokemon position
+        self.click(self.center_x, self.center_y)
+        self.reset_view()
 
     def check_active_pokemon(self):
         self.drag((500, 1100), (self.center_x, self.center_y))
@@ -671,6 +737,10 @@ class GameController:
         )
 
     def drag_first_y(self, start_pos, end_pos, duration=0.5):
-        drag_first_y(
+        # drag_first_y(
+        # start_pos, end_pos, duration, self.debug_window, self.last_screenshot
+        # )
+        ## TODO: Implement drag_first_y, not working as expected
+        drag_position(
             start_pos, end_pos, duration, self.debug_window, self.last_screenshot
         )
