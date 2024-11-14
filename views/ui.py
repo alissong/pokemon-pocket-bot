@@ -769,24 +769,167 @@ class BotUI:
 
     def show_device_connection_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Connect to Device")
-        dialog.geometry("400x300")
+        dialog.title("Device Connection Manager")
+        dialog.geometry("500x500")
         dialog.transient(self.root)
+        dialog.grab_set()
 
-        # Device list
-        tk.Label(dialog, text="Available Devices:", font=UI_FONTS["text"]).pack(pady=5)
+        # Connection status frame
+        status_frame = tk.LabelFrame(
+            dialog, text="Connection Status", font=UI_FONTS["text"]
+        )
+        status_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        devices_frame = tk.Frame(dialog)
-        devices_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        current_device = tk.Label(
+            status_frame,
+            text=f"Current device: {self.app_state.emulator_name or 'None'}",
+            font=UI_FONTS["text"],
+        )
+        current_device.pack(pady=5)
 
-        devices_list = tk.Listbox(devices_frame, font=UI_FONTS["text"])
+        connection_status = tk.Label(
+            status_frame,
+            text="Status: Not connected",
+            font=UI_FONTS["text"],
+            fg=UI_COLORS["warning"],
+        )
+        connection_status.pack(pady=5)
+
+        # Device list frame
+        device_frame = tk.LabelFrame(
+            dialog, text="Available Devices", font=UI_FONTS["text"]
+        )
+        device_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        devices_list = tk.Listbox(
+            device_frame, font=UI_FONTS["text"], selectmode=tk.SINGLE
+        )
         devices_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = tk.Scrollbar(devices_frame)
+        scrollbar = tk.Scrollbar(device_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         devices_list.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=devices_list.yview)
+
+        def refresh_device_list():
+            devices_list.delete(0, tk.END)
+            devices = self.bot.emulator_controller.get_all_devices()
+
+            if not devices:
+                connection_status.config(
+                    text="Status: No devices found", fg=UI_COLORS["error"]
+                )
+                return
+
+            for device in devices:
+                state_text = (
+                    "✓ Connected" if device["state"] == "device" else "✗ Disconnected"
+                )
+                is_current = (
+                    " (Current)" if device["id"] == self.app_state.emulator_name else ""
+                )
+                devices_list.insert(
+                    tk.END, f"{device['id']} - {state_text}{is_current}"
+                )
+
+                if (
+                    device["id"] == self.app_state.emulator_name
+                    and device["state"] == "device"
+                ):
+                    connection_status.config(
+                        text=f"Status: Connected to {device['id']}",
+                        fg=UI_COLORS["success"],
+                    )
+                elif device["state"] == "device":
+                    connection_status.config(
+                        text="Status: Device available", fg=UI_COLORS["info"]
+                    )
+
+        def connect_selected():
+            selection = devices_list.curselection()
+            if not selection:
+                connection_status.config(
+                    text="Status: Please select a device", fg=UI_COLORS["warning"]
+                )
+                return
+
+            device_str = devices_list.get(selection[0])
+            device_id = device_str.split(" - ")[0].strip()
+
+            connection_status.config(
+                text=f"Status: Connecting to {device_id}...", fg=UI_COLORS["info"]
+            )
+            dialog.update()
+
+            if self.bot.emulator_controller.connect_to_device(device_id):
+                connection_status.config(
+                    text=f"Status: Connected to {device_id}", fg=UI_COLORS["success"]
+                )
+                current_device.config(text=f"Current device: {device_id}")
+                refresh_device_list()  # Refresh to show updated status
+            else:
+                connection_status.config(
+                    text="Status: Connection failed", fg=UI_COLORS["error"]
+                )
+
+        def disconnect_current():
+            if not self.app_state.emulator_name:
+                connection_status.config(
+                    text="Status: No device connected", fg=UI_COLORS["warning"]
+                )
+                return
+
+            self.bot.emulator_controller.disconnect_all_devices()
+            self.app_state.emulator_name = None
+            current_device.config(text="Current device: None")
+            connection_status.config(text="Status: Disconnected", fg=UI_COLORS["info"])
+            refresh_device_list()
+
+        # Buttons frame
+        buttons_frame = tk.Frame(dialog)
+        buttons_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        # Add buttons with improved styling
+        refresh_btn = tk.Button(
+            buttons_frame,
+            text="🔄 Refresh",
+            command=refresh_device_list,
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+            width=12,
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=5)
+
+        connect_btn = tk.Button(
+            buttons_frame,
+            text="🔌 Connect",
+            command=connect_selected,
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+            width=12,
+        )
+        connect_btn.pack(side=tk.LEFT, padx=5)
+
+        disconnect_btn = tk.Button(
+            buttons_frame,
+            text="⚡ Disconnect",
+            command=disconnect_current,
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+            width=12,
+        )
+        disconnect_btn.pack(side=tk.LEFT, padx=5)
+
+        close_btn = tk.Button(
+            buttons_frame,
+            text="✖ Close",
+            command=dialog.destroy,
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+            width=12,
+        )
+        close_btn.pack(side=tk.RIGHT, padx=5)
 
         # Manual connection frame
         manual_frame = tk.LabelFrame(
@@ -800,42 +943,35 @@ class BotUI:
         ip_entry = tk.Entry(manual_frame, font=UI_FONTS["text"])
         ip_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
-        def refresh_device_list():
-            devices_list.delete(0, tk.END)
-            devices = self.bot.emulator_controller.get_all_devices()
-            for device in devices:
-                devices_list.insert(tk.END, f"{device['id']} - {device['state']}")
-
-        def connect_selected():
-            selection = devices_list.curselection()
-            if selection:
-                device_id = devices_list.get(selection[0]).split(" - ")[0]
-                self.bot.emulator_controller.connect_to_device(device_id)
-                self.log_message(f"Connecting to device: {device_id}")
-                dialog.destroy()
+        manual_connect_btn = tk.Button(
+            manual_frame,
+            text="Connect",
+            command=lambda: connect_manual(),
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+        )
+        manual_connect_btn.pack(side=tk.RIGHT, padx=5)
 
         def connect_manual():
-            ip_port = ip_entry.get()
-            if ip_port:
-                self.bot.emulator_controller.connect_to_device(ip_port)
-                self.log_message(f"Connecting to device: {ip_port}")
-                dialog.destroy()
+            ip_port = ip_entry.get().strip()
+            if not ip_port:
+                connection_status.config(
+                    text="Status: Please enter IP:Port", fg=UI_COLORS["warning"]
+                )
+                return
 
-        # Buttons
-        buttons_frame = tk.Frame(dialog)
-        buttons_frame.pack(fill=tk.X, padx=10, pady=5)
+            if self.bot.emulator_controller.connect_to_device(ip_port):
+                connection_status.config(
+                    text=f"Status: Connected to {ip_port}", fg=UI_COLORS["success"]
+                )
+                current_device.config(text=f"Current device: {ip_port}")
+                refresh_device_list()
+            else:
+                connection_status.config(
+                    text="Status: Connection failed", fg=UI_COLORS["error"]
+                )
 
-        tk.Button(buttons_frame, text="Refresh", command=refresh_device_list).pack(
-            side=tk.LEFT, padx=5
-        )
-        tk.Button(
-            buttons_frame, text="Connect Selected", command=connect_selected
-        ).pack(side=tk.LEFT, padx=5)
-        tk.Button(buttons_frame, text="Connect Manual", command=connect_manual).pack(
-            side=tk.LEFT, padx=5
-        )
-
-        refresh_device_list()
+        refresh_device_list()  # Initial population
 
     def refresh_devices(self):
         devices = self.bot.emulator_controller.get_all_devices()
