@@ -108,6 +108,18 @@ class BotUI:
             label="Select Emulator Path", command=self.select_emulator_path
         )
 
+        # Device menu
+        device_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Devices", menu=device_menu)
+        device_menu.add_command(
+            label="Connect to Device", command=self.show_device_connection_dialog
+        )
+        device_menu.add_command(label="Refresh Devices", command=self.refresh_devices)
+        device_menu.add_separator()
+        device_menu.add_command(
+            label="Disconnect All", command=self.disconnect_all_devices
+        )
+
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Tools", menu=tools_menu)
@@ -754,3 +766,83 @@ class BotUI:
         if self.card_name_event:
             self.card_name_event.set()
         self.root.destroy()
+
+    def show_device_connection_dialog(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Connect to Device")
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+
+        # Device list
+        tk.Label(dialog, text="Available Devices:", font=UI_FONTS["text"]).pack(pady=5)
+
+        devices_frame = tk.Frame(dialog)
+        devices_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        devices_list = tk.Listbox(devices_frame, font=UI_FONTS["text"])
+        devices_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(devices_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        devices_list.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=devices_list.yview)
+
+        # Manual connection frame
+        manual_frame = tk.LabelFrame(
+            dialog, text="Manual Connection", font=UI_FONTS["text"]
+        )
+        manual_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(manual_frame, text="IP:Port", font=UI_FONTS["text"]).pack(
+            side=tk.LEFT, padx=5
+        )
+        ip_entry = tk.Entry(manual_frame, font=UI_FONTS["text"])
+        ip_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+        def refresh_device_list():
+            devices_list.delete(0, tk.END)
+            devices = self.bot.emulator_controller.get_all_devices()
+            for device in devices:
+                devices_list.insert(tk.END, f"{device['id']} - {device['state']}")
+
+        def connect_selected():
+            selection = devices_list.curselection()
+            if selection:
+                device_id = devices_list.get(selection[0]).split(" - ")[0]
+                self.bot.emulator_controller.connect_to_device(device_id)
+                self.log_message(f"Connecting to device: {device_id}")
+                dialog.destroy()
+
+        def connect_manual():
+            ip_port = ip_entry.get()
+            if ip_port:
+                self.bot.emulator_controller.connect_to_device(ip_port)
+                self.log_message(f"Connecting to device: {ip_port}")
+                dialog.destroy()
+
+        # Buttons
+        buttons_frame = tk.Frame(dialog)
+        buttons_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Button(buttons_frame, text="Refresh", command=refresh_device_list).pack(
+            side=tk.LEFT, padx=5
+        )
+        tk.Button(
+            buttons_frame, text="Connect Selected", command=connect_selected
+        ).pack(side=tk.LEFT, padx=5)
+        tk.Button(buttons_frame, text="Connect Manual", command=connect_manual).pack(
+            side=tk.LEFT, padx=5
+        )
+
+        refresh_device_list()
+
+    def refresh_devices(self):
+        devices = self.bot.emulator_controller.get_all_devices()
+        self.log_message("Available devices:")
+        for device in devices:
+            self.log_message(f"• {device['id']} - {device['state']}")
+
+    def disconnect_all_devices(self):
+        self.bot.emulator_controller.disconnect_all_devices()
+        self.log_message("Disconnected all devices")
