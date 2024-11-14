@@ -9,3 +9,5 @@ screenshot_region.png
 images/cards/
 deck.json
 card_data_cache.json
+card_images_api_cache/
+images/cards copy/

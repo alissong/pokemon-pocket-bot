@@ -27,6 +27,11 @@ class CardRecognitionService:
         self.log_callback = log_callback
         self.deck_info = deck_info
         self.card_images = card_images
+        self.card_images_api_cache_path = "card_images_api_cache"
+
+        # Create folder if it doesn't exist
+        if not os.path.exists(self.card_images_api_cache_path):
+            os.makedirs(self.card_images_api_cache_path)
 
     def check_cards(
         self, number_of_cards, card_start_x, card_y, hand_state, debug_images=False
@@ -130,7 +135,7 @@ class CardRecognitionService:
         similarities = []
         for card in cards:
             card_id = card["id"]
-            image_path = f"card_images_api_cache/{card_id}.png"
+            image_path = os.path.join(self.card_images_api_cache_path, f"{card_id}.png")
             if not os.path.exists(image_path):
                 # Download and save the image
                 image_url = self.card_data_service.get_card_image_url(card_id)
@@ -139,6 +144,7 @@ class CardRecognitionService:
                     f.write(response.content)
             # Load the image from cache
             api_card_image = cv2.imread(image_path)
+            card["image"] = api_card_image
             # Proceed with similarity calculation
             standard_size = (200, 300)
             resized_api_card_image = cv2.resize(api_card_image, standard_size)

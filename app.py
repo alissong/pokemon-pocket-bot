@@ -1,9 +1,7 @@
-# src/app.py
-
 import tkinter as tk
 
 from models.app_state import AppState
-from views.ui import BotUI
+from views.main_ui import BotUI
 
 if __name__ == "__main__":
     root = tk.Tk()
