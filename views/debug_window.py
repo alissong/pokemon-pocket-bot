@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+import cv2
 from PIL import Image, ImageDraw, ImageTk
 
 # Window Configuration
@@ -192,6 +193,9 @@ class DebugWindow:
         action_description, image, action_coords = self.actions[index]
 
         if image is not None:
+            # Convert image to RGB mode if it isn't already
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
             pil_image = Image.fromarray(image)
 
             # Calculate aspect ratio preserving resize

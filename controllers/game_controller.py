@@ -187,7 +187,7 @@ class GameController:
                 self.card_start_x,
                 self.card_y,
                 self.game_state.hand_state,
-                True,
+                False,
             )
         else:
             self.game_state.hand_state = []
@@ -224,11 +224,16 @@ class GameController:
             self.add_energy_to_pokemon()
             self.try_attack()
 
-    def process_hand_cards(self, recursion_level=0):
+    def process_hand_cards(self, recursion_level=0, processed_cards=None):
         if not self.running_event.is_set():
             return
+
+        # Initialize processed_cards set on first call
+        if processed_cards is None:
+            processed_cards = set()
+
         # Prevent infinite recursion
-        if recursion_level >= 10:  # Safety limit
+        if recursion_level >= 10:
             self.log_callback("Maximum card processing depth reached")
             return
 
@@ -243,56 +248,84 @@ class GameController:
         card_offset_x = card_offset_mapping.get(self.game_state.number_of_cards, 20)
         hand_changed = False
 
+        # Create unique card identifiers based on name, id, and position
+        current_hand_cards = {
+            (card["name"], card["info"]["id"], card["position"])
+            for card in self.game_state.hand_state
+        }
+
         for card in self.game_state.hand_state:
             if not self.running_event.is_set():
                 return
-            if card in self.game_state.failed_cards:
+
+            # Create unique identifier for current card
+            card_identifier = (card["name"], card["info"]["id"], card["position"])
+
+            # Skip if card was already processed or failed
+            if (
+                card_identifier in processed_cards
+                or card in self.game_state.failed_cards
+            ):
                 continue
+
             card_delta = 0
 
             if self.game_state.is_first_turn and card["info"].get("item_card"):
-                self.log_callback(f"Skipping trainer card {card['name']} on first turn")
                 continue
 
             if (
                 card["info"].get("item_card")
                 and self.game_state.played_trainer_cards >= 2
             ):
-                self.log_callback(
-                    f"Skipping trainer card {card['name']} because we already played 2"
-                )
                 continue
 
             start_x = self.card_start_x - (card["position"] * card_offset_x)
+
+            # Try to play the card based on its type
             if card["info"].get("item_card"):
                 played, this_card_delta = self.play_trainer_card(card, start_x)
                 if played:
                     card_delta += this_card_delta
                     card_delta -= 1
                     hand_changed = True
+                    processed_cards.add(card_identifier)
                     break
             elif self.can_set_active_pokemon(card):
                 if self.set_active_pokemon(card, start_x):
                     hand_changed = True
-                    card_delta -= 1  # Placing a Pokémon reduces hand size by 1
+                    card_delta -= 1
+                    processed_cards.add(card_identifier)
                     break
             elif self.can_place_on_bench(card):
                 if self.place_pokemon_on_bench(card, start_x):
                     hand_changed = True
-                    card_delta -= 1  # Placing a Pokémon on bench reduces hand size by 1
+                    card_delta -= 1
+                    processed_cards.add(card_identifier)
                     break
             elif self.can_evolve_pokemon(card):
                 if self.evolve_pokemon(card, start_x):
                     hand_changed = True
-                    card_delta -= 1  # Evolving a Pokémon reduces hand size by 1
+                    card_delta -= 1
+                    processed_cards.add(card_identifier)
                     break
+
             self.reset_view()
+
         if hand_changed:
             self.reset_view()
             self.update_game_state(cards_delta=card_delta)
             # Only recurse if we still have cards to process
             if self.game_state.hand_state:
-                self.process_hand_cards(recursion_level + 1)
+                # Get new hand state after playing cards
+                new_hand_cards = {
+                    (card["name"], card["info"]["id"], card["position"])
+                    for card in self.game_state.hand_state
+                }
+                # Only process cards that weren't in the previous hand
+                unprocessed_cards = new_hand_cards - current_hand_cards
+                if unprocessed_cards:
+                    self.process_hand_cards(recursion_level + 1, processed_cards)
+
         if recursion_level == 0:
             self.game_state.played_trainer_cards = 0
             self.game_state.failed_cards = []
@@ -688,7 +721,7 @@ class GameController:
         for slot_idx, bench_position in enumerate(bench_positions):
             self.click(bench_position[0], bench_position[1])
             zoomed_card_image = self.battle_controller.get_card(
-                bench_position[0], bench_position[1], 1.25
+                bench_position[0], bench_position[1], 0.7
             )
             pokemon_id = self.card_recognition_service.identify_card(zoomed_card_image)
             if pokemon_id:
@@ -725,7 +758,7 @@ class GameController:
     def check_active_pokemon(self):
         self.drag((500, 1100), (self.center_x, self.center_y))
         zoomed_card_image = self.battle_controller.get_card(
-            self.center_x, self.center_y, 1.25
+            self.center_x, self.center_y, 0.7
         )
         main_zone_pokemon_id = self.card_recognition_service.identify_card(
             zoomed_card_image

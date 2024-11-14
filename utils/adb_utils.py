@@ -84,7 +84,7 @@ def long_press_position(x, y, duration=1.0):
 
     def capture_screenshot_during_press():
         nonlocal screenshot
-        time.sleep(duration * 0.5)
+        time.sleep(0.5)
         screenshot = take_screenshot()
 
     screenshot_thread = Thread(target=capture_screenshot_during_press)

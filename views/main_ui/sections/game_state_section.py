@@ -4,32 +4,25 @@ from views.components.section_frame import SectionFrame
 from views.themes import GAME_STATE_CONFIG, UI_COLORS, UI_FONTS
 
 
-class GameStateDisplayFrame:
-    def __init__(self, parent, controller):
-        self.controller = controller
-        self.frame = SectionFrame(parent, "Game State Display").frame
-        self.setup_display()
+class GameStateSection:
+    def __init__(self, parent, bot_ui):
+        self.bot_ui = bot_ui
+        self.section = SectionFrame(parent, "Game State Display")
+        self.section.frame.pack(fill=tk.X, pady=5)
+        self.setup_game_state()
 
-    def setup_display(self):
-        bg_color = UI_COLORS["bg"]
-        fg_color = UI_COLORS["fg"]
-        accent_color = UI_COLORS["accent"]
-        button_bg_color = UI_COLORS["button_bg"]
-        entry_bg_color = UI_COLORS["entry_bg"]
-        entry_fg_color = UI_COLORS["entry_fg"]
-        text_font = UI_FONTS["text"]
-
+    def setup_game_state(self):
         # Refresh controls
-        refresh_frame = tk.Frame(self.frame, bg=bg_color)
+        refresh_frame = tk.Frame(self.section.frame, bg=UI_COLORS["bg"])
         refresh_frame.pack(fill=tk.X, pady=(0, 5))
 
         self.refresh_button = tk.Button(
             refresh_frame,
             text="🔄 Refresh",
             command=self.update_display,
-            bg=button_bg_color,
-            fg=fg_color,
-            font=text_font,
+            bg=UI_COLORS["button_bg"],
+            fg=UI_COLORS["fg"],
+            font=UI_FONTS["text"],
             relief=tk.FLAT,
         )
         self.refresh_button.pack(side=tk.LEFT, padx=5)
@@ -39,51 +32,60 @@ class GameStateDisplayFrame:
             refresh_frame,
             text="Auto refresh",
             variable=self.auto_refresh_var,
-            bg=bg_color,
-            fg=fg_color,
-            font=text_font,
-            activebackground=bg_color,
-            activeforeground=fg_color,
-            selectcolor=bg_color,
+            bg=UI_COLORS["bg"],
+            fg=UI_COLORS["fg"],
+            font=UI_FONTS["text"],
+            activebackground=UI_COLORS["bg"],
+            activeforeground=UI_COLORS["fg"],
+            selectcolor=UI_COLORS["bg"],
         )
         self.auto_refresh_check.pack(side=tk.LEFT)
 
         # Active Pokémon display
-        active_frame = tk.Frame(self.frame, bg=bg_color)
+        active_frame = tk.Frame(self.section.frame, bg=UI_COLORS["bg"])
         active_frame.pack(fill=tk.X, padx=5, pady=2)
         tk.Label(
             active_frame,
             text="Active Pokémon:",
-            font=text_font,
-            bg=bg_color,
-            fg=accent_color,
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["bg"],
+            fg=UI_COLORS["accent"],
         ).pack(side=tk.LEFT)
+
         self.active_text = tk.Text(
             active_frame,
             height=GAME_STATE_CONFIG["text_height"]["active"],
             width=30,
-            font=text_font,
-            bg=entry_bg_color,
-            fg=entry_fg_color,
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["entry_fg"],
             relief=tk.FLAT,
         )
         self.active_text.pack(fill=tk.X, padx=5)
         self.active_text.config(state=tk.DISABLED)
 
         # Hand and Bench columns
-        columns_frame = tk.Frame(self.frame, bg=bg_color)
+        columns_frame = tk.Frame(self.section.frame, bg=UI_COLORS["bg"])
         columns_frame.pack(fill=tk.X, expand=True, padx=5, pady=2)
 
         # Hand column
-        hand_frame = tk.Frame(columns_frame, bg=entry_bg_color, relief=tk.FLAT)
+        self.setup_hand_column(columns_frame)
+
+        # Bench column
+        self.setup_bench_column(columns_frame)
+
+    def setup_hand_column(self, parent):
+        hand_frame = tk.Frame(parent, bg=UI_COLORS["entry_bg"], relief=tk.FLAT)
         hand_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+
         tk.Label(
             hand_frame,
             text="Hand",
-            font=text_font,
-            bg=entry_bg_color,
-            fg=accent_color,
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["accent"],
         ).pack()
+
         self.hand_text = tk.Text(
             hand_frame,
             height=GAME_STATE_CONFIG["text_height"]["hand"],
@@ -96,16 +98,18 @@ class GameStateDisplayFrame:
         self.hand_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self.hand_text.config(state=tk.DISABLED)
 
-        # Bench column
-        bench_frame = tk.Frame(columns_frame, bg=entry_bg_color, relief=tk.FLAT)
+    def setup_bench_column(self, parent):
+        bench_frame = tk.Frame(parent, bg=UI_COLORS["entry_bg"], relief=tk.FLAT)
         bench_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+
         tk.Label(
             bench_frame,
             text="Bench",
-            font=text_font,
-            bg=entry_bg_color,
-            fg=accent_color,
+            font=UI_FONTS["text"],
+            bg=UI_COLORS["entry_bg"],
+            fg=UI_COLORS["accent"],
         ).pack()
+
         self.bench_text = tk.Text(
             bench_frame,
             height=GAME_STATE_CONFIG["text_height"]["bench"],
@@ -118,10 +122,17 @@ class GameStateDisplayFrame:
         self.bench_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self.bench_text.config(state=tk.DISABLED)
 
+    def start_auto_refresh(self):
+        def refresh_cycle():
+            if self.auto_refresh_var.get():
+                self.update_display()
+            self.bot_ui.root.after(GAME_STATE_CONFIG["refresh_interval"], refresh_cycle)
+
+        self.bot_ui.root.after(GAME_STATE_CONFIG["refresh_interval"], refresh_cycle)
+
     def update_display(self):
-        """Update the game state display with current information"""
         try:
-            game_state = self.controller.bot.game_state
+            game_state = self.bot_ui.bot.game_state
 
             # Update hand display
             self.hand_text.config(state=tk.NORMAL)
@@ -155,4 +166,6 @@ class GameStateDisplayFrame:
                     self.bench_text.insert(tk.END, f"[{slot+1}] Empty\n")
             self.bench_text.config(state=tk.DISABLED)
         except Exception as e:
-            self.controller.log_message(f"Error updating game state display: {e}")
+            self.bot_ui.log_section.log_message(
+                f"Error updating game state display: {e}"
+            )

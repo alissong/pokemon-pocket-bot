@@ -4,10 +4,11 @@ from views.components.section_frame import SectionFrame
 from views.themes import UI_COLORS, UI_FONTS
 
 
-class BotControlsFrame:
-    def __init__(self, parent, controller):
-        self.controller = controller
-        self.frame = SectionFrame(parent, "Bot Controls").frame
+class ControlSection:
+    def __init__(self, parent, bot_ui):
+        self.bot_ui = bot_ui
+        self.section = SectionFrame(parent, "Bot Controls")
+        self.section.frame.pack(fill=tk.X, pady=5)
         self.setup_controls()
 
     def setup_controls(self):
@@ -21,15 +22,9 @@ class BotControlsFrame:
         }
 
         self.start_stop_button = tk.Button(
-            self.frame,
+            self.section.frame,
             text="Start Bot",
-            command=self.controller.toggle_bot,
+            command=self.bot_ui.ui_actions.toggle_bot,
             **button_style,
         )
         self.start_stop_button.pack(pady=5)
-
-    def start_bot(self):
-        self.start_stop_button.config(text="Stop Bot", bg=UI_COLORS["error"])
-
-    def stop_bot(self):
-        self.start_stop_button.config(text="Start Bot", bg=UI_COLORS["info"])

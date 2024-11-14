@@ -43,7 +43,7 @@ class CardRecognitionService:
 
         for i in range(number_of_cards):
             self.image_processor.reset_view()
-            zoomed_card_image = self.image_processor.get_card(x, card_y, 1.5)
+            zoomed_card_image = self.image_processor.get_card(x, card_y, 0.7)
 
             if debug_images:
                 self.save_debug_image(zoomed_card_image)
@@ -209,7 +209,7 @@ class CardRecognitionService:
         x = card_start_x - (position * offset)
 
         # Get and analyze the card image
-        zoomed_card_image = self.image_processor.get_card(x, card_y, 1.5)
+        zoomed_card_image = self.image_processor.get_card(x, card_y, 0.7)
         card_id = self.identify_card(zoomed_card_image)
 
         if card_id is None:
