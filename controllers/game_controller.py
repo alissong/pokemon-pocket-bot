@@ -55,17 +55,45 @@ class GameController:
         self.running_event.clear()  # Clear the event to stop the bot
 
     def run(self):
-        self.emulator_controller.connect_and_run()
+        """Main bot loop"""
+        # Try to connect first
+        if not self.emulator_controller.connect_and_run():
+            self.log_callback("Failed to connect to any device. Stopping bot.")
+            self.running_event.clear()
+            return
+
         while self.running_event.is_set():
             try:
+                # Check if we're still connected
+                devices = self.emulator_controller.get_all_devices()
+                connected = False
+                for device in devices:
+                    if (
+                        device["id"] == self.app_state.emulator_name
+                        and device["state"] == "device"
+                    ):
+                        connected = True
+                        break
+
+                if not connected:
+                    self.log_callback(
+                        "Lost connection to device. Attempting to reconnect..."
+                    )
+                    if not self.emulator_controller.connect_and_run():
+                        self.log_callback("Failed to reconnect. Stopping bot.")
+                        self.running_event.clear()
+                        return
+
                 # Normal bot operations
                 self.prepare_for_battle()
                 self.navigate_to_battle()
                 self.start_battle()
                 self.handle_battle()
                 self.end_battle()
+
             except Exception as e:
                 self.log_callback(f"An error occurred: {e}")
+                time.sleep(5)  # Wait before retrying
 
     def prepare_for_battle(self):
         self.game_state.reset()

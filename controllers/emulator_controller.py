@@ -47,7 +47,7 @@ class EmulatorController:
     def get_emulator_name(self):
         try:
             result = subprocess.run(
-                ["adb", "devices", "-l"],  # Added -l for more detailed output
+                ["adb", "devices", "-l"],
                 timeout=10,
                 capture_output=True,
                 text=True,
@@ -66,25 +66,21 @@ class EmulatorController:
                     if len(parts) >= 2:
                         device_id = parts[0]
                         state = parts[1]
-                        devices.append((device_id, state))
+                        # Only add online devices
+                        if state == "device":
+                            devices.append(device_id)
 
             if not devices:
-                self.log_callback("No devices found")
+                self.log_callback("No online devices found")
                 return None
 
-            # Check for offline devices
-            offline_devices = [d[0] for d in devices if d[1] == "offline"]
-            if offline_devices:
-                self.log_callback(f"Found offline devices: {offline_devices}")
-                self.handle_offline_devices(offline_devices)
+            if len(devices) > 1:
+                # Multiple devices found - let UI handle selection
+                return None
 
-            # Return first online device
-            online_devices = [d[0] for d in devices if d[1] == "device"]
-            return online_devices[0] if online_devices else None
+            # Single device found - return it
+            return devices[0]
 
-        except subprocess.TimeoutExpired:
-            self.log_callback("ADB command timed out")
-            return None
         except Exception as e:
             self.log_callback(f"Error getting emulator name: {e}")
             return None
@@ -110,37 +106,77 @@ class EmulatorController:
         except Exception as e:
             self.log_callback(f"Error during offline device recovery: {e}")
 
+    def connect_to_device(self, device_id):
+        """Connect to a specific device by ID or IP:port"""
+        try:
+            # Check if device is already connected
+            devices = self.get_all_devices()
+            for device in devices:
+                if device["id"] == device_id and device["state"] == "device":
+                    self.log_callback(f"Device {device_id} is already connected")
+                    self.app_state.emulator_name = device_id
+                    return True
+
+            # If not connected, try to connect
+            self.log_callback(f"Attempting to connect to {device_id}...")
+
+            # For emulator connections, modify the address format
+            if device_id.startswith("emulator-"):
+                connect_address = f"127.0.0.1:{device_id.split('-')[1]}"
+            else:
+                connect_address = device_id
+
+            result = subprocess.run(
+                ["adb", "connect", connect_address],
+                timeout=10,
+                capture_output=True,
+                text=True,
+            )
+
+            if "connected" in result.stdout.lower():
+                if self.wait_for_device():
+                    self.log_callback(f"Successfully connected to {device_id}")
+                    self.app_state.emulator_name = device_id
+                    return True
+                else:
+                    self.log_callback("Device connection timed out")
+                    return False
+            else:
+                self.log_callback(f"Failed to connect to {device_id}: {result.stdout}")
+                return False
+
+        except Exception as e:
+            self.log_callback(f"Error connecting to device: {e}")
+            return False
+
     def connect_and_run(self):
+        """Initial connection attempt when bot starts"""
         attempts = 0
         while attempts < self.max_reconnect_attempts:
             try:
+                # Get all available devices
+                devices = self.get_all_devices()
+
+                if not devices:
+                    self.log_callback("No devices found")
+                    return False
+
+                # If we have a stored device name, try to connect to it first
                 if self.app_state.emulator_name:
-                    emulator_name = self.app_state.emulator_name
-                else:
-                    emulator_name = self.get_emulator_name()
+                    for device in devices:
+                        if device["id"] == self.app_state.emulator_name:
+                            if self.connect_to_device(device["id"]):
+                                return True
+                            break
 
-                if not emulator_name:
-                    self.log_callback("No emulator found, retrying...")
-                    attempts += 1
-                    time.sleep(self.reconnect_delay)
-                    continue
+                # If no stored device or connection failed, try first available device
+                for device in devices:
+                    if device["state"] == "device":
+                        if self.connect_to_device(device["id"]):
+                            return True
+                        break
 
-                # Try to connect
-                result = subprocess.run(
-                    ["adb", "connect", emulator_name],
-                    timeout=10,
-                    capture_output=True,
-                    text=True,
-                )
-
-                if "connected" in result.stdout.lower():
-                    if self.wait_for_device():
-                        self.log_callback(f"Successfully connected to {emulator_name}")
-                        return True
-                    else:
-                        self.log_callback("Device connection timed out")
-                else:
-                    self.log_callback(f"Failed to connect: {result.stdout}")
+                self.log_callback("No available devices to connect to")
 
             except Exception as e:
                 self.log_callback(f"Connection attempt {attempts + 1} failed: {e}")
@@ -236,37 +272,6 @@ class EmulatorController:
         except Exception as e:
             self.log_callback(f"Error getting devices: {e}")
             return []
-
-    def connect_to_device(self, device_id):
-        """Connect to a specific device by ID or IP:port"""
-        try:
-            # Kill ADB server first to reset connections
-            subprocess.run(["adb", "kill-server"], timeout=5)
-            time.sleep(2)
-
-            # Start ADB server
-            subprocess.run(["adb", "start-server"], timeout=5)
-            time.sleep(2)
-
-            # Try to connect
-            result = subprocess.run(
-                ["adb", "connect", device_id],
-                timeout=10,
-                capture_output=True,
-                text=True,
-            )
-
-            if "connected" in result.stdout.lower():
-                self.log_callback(f"Successfully connected to {device_id}")
-                self.app_state.emulator_name = device_id
-                return True
-            else:
-                self.log_callback(f"Failed to connect to {device_id}: {result.stdout}")
-                return False
-
-        except Exception as e:
-            self.log_callback(f"Error connecting to device: {e}")
-            return False
 
     def disconnect_all_devices(self):
         """Disconnect all connected devices"""
