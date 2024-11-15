@@ -146,9 +146,14 @@ class ImageProcessor:
 
     def log_and_click(self, position, message, screenshot=None):
         self.log_callback(message)
+        debug_window = (
+            self.debug_window
+            if (self.debug_window and self.debug_window.is_open)
+            else None
+        )
         click_position(
             position[0],
             position[1],
-            debug_window=self.debug_window,
+            debug_window=debug_window,
             screenshot=screenshot,
         )

@@ -780,7 +780,7 @@ class GameController:
 
     def click(self, x, y, include_debug=True):
         """Wrapper for click_position with default debug parameters"""
-        if include_debug:
+        if include_debug and self.debug_window and self.debug_window.is_open:
             click_position(
                 x, y, debug_window=self.debug_window, screenshot=self.last_screenshot
             )
@@ -789,13 +789,16 @@ class GameController:
 
     def drag(self, start_pos, end_pos, duration=0.5):
         """Wrapper for drag_position with default debug parameters"""
-        drag_position(
-            start_pos,
-            end_pos,
-            duration,
-            debug_window=self.debug_window,
-            screenshot=self.last_screenshot,
-        )
+        if self.debug_window and self.debug_window.is_open:
+            drag_position(
+                start_pos,
+                end_pos,
+                duration,
+                debug_window=self.debug_window,
+                screenshot=self.last_screenshot,
+            )
+        else:
+            drag_position(start_pos, end_pos, duration)
 
     def drag_first_y(self, start_pos, end_pos, duration=0.5):
         # drag_first_y(

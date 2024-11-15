@@ -44,15 +44,17 @@ class DebugWindow:
         self.current_index = None
         self.image_size = DEFAULT_IMAGE_SIZE
         self.auto_follow = True
+        self.is_open = False
 
     def open_window(self, main_x=None, main_y=None, main_height=None):
         if self.window is not None:
             self.window.deiconify()
+            self.is_open = True
             return
 
         self.window = tk.Toplevel(self.root)
         self.window.title("Debug Window")
-        self.window.protocol("WM_DELETE_WINDOW", self.window.withdraw)
+        self.window.protocol("WM_DELETE_WINDOW", self.close_window)
         self.window.configure(bg=THEME["bg_color"])
 
         screen_width = self.root.winfo_screenwidth()
@@ -137,9 +139,12 @@ class DebugWindow:
             max(self.image_frame.winfo_height() - WINDOW_PADDING, 1),
         )
 
+        self.is_open = True
+
     def close_window(self):
         if self.window is not None:
             self.window.withdraw()
+            self.is_open = False
 
     def log_action(self, action_description, image=None, action_coords=None):
         # Limit the history size
