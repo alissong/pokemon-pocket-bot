@@ -19,42 +19,57 @@ class PokemonBot:
         self.ui_instance = ui_instance
         self.debug_window = ui_instance.debug_window
 
-        self.template_images = load_template_images("images")
-        images_cards_folder = "images/cards"
-        if not os.path.exists(images_cards_folder):
-            os.makedirs(images_cards_folder)
-        self.card_images = load_all_cards(images_cards_folder)
+        try:
+            self.log_callback("🔄 Initializing bot components...")
 
-        self.card_data_service = CardDataService()
-        self.image_processor = ImageProcessor(self.log_callback, self.debug_window)
-        self.battle_controller = BattleController(
-            self.image_processor,
-            self.template_images,
-            self.card_images,
-            self.log_callback,
-        )
+            # Load images
+            self.template_images = load_template_images("images")
+            images_cards_folder = "images/cards"
+            if not os.path.exists(images_cards_folder):
+                os.makedirs(images_cards_folder)
+                self.log_callback("📁 Created cards folder")
+            self.card_images = load_all_cards(images_cards_folder)
+            self.log_callback(f"📦 Loaded {len(self.card_images)} card images")
 
-        self.game_state = GameState()
-        self.emulator_controller = EmulatorController(self.app_state, self.log_callback)
-        self.card_recognition_service = CardRecognitionService(
-            self.image_processor,
-            self.card_data_service,
-            self.ui_instance,
-            self.log_callback,
-            self.card_images,
-        )
+            # Initialize services
+            self.card_data_service = CardDataService()
+            self.image_processor = ImageProcessor(self.log_callback, self.debug_window)
+            self.battle_controller = BattleController(
+                self.image_processor,
+                self.template_images,
+                self.card_images,
+                self.log_callback,
+            )
 
-        self.game_controller = GameController(
-            self.app_state,
-            self.emulator_controller,
-            self.battle_controller,
-            self.image_processor,
-            self.card_recognition_service,
-            self.game_state,
-            self.template_images,
-            self.log_callback,
-            self.debug_window,
-        )
+            self.game_state = GameState()
+            self.emulator_controller = EmulatorController(
+                self.app_state, self.log_callback
+            )
+            self.card_recognition_service = CardRecognitionService(
+                self.image_processor,
+                self.card_data_service,
+                self.ui_instance,
+                self.log_callback,
+                self.card_images,
+            )
+
+            self.game_controller = GameController(
+                self.app_state,
+                self.emulator_controller,
+                self.battle_controller,
+                self.image_processor,
+                self.card_recognition_service,
+                self.game_state,
+                self.template_images,
+                self.log_callback,
+                self.debug_window,
+            )
+
+            self.log_callback("✅ Bot initialization complete")
+
+        except Exception as e:
+            self.log_callback(f"❌ Bot initialization failed: {e!s}")
+            raise
 
     def start(self):
         self.game_controller.start()

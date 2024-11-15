@@ -88,6 +88,50 @@ class RegionCaptureUI:
         )
         self.confirm_button.pack(pady=10)
 
+        # Add frame for coordinate inputs
+        self.coords_frame = tk.Frame(self.root, bg=THEME["bg_color"])
+        self.coords_frame.pack(before=self.confirm_button, pady=5)
+
+        # Create and pack input fields
+        labels = ["X:", "Y:", "Width:", "Height:"]
+        self.coord_entries = {}
+
+        for i, label in enumerate(labels):
+            tk.Label(
+                self.coords_frame,
+                text=label,
+                font=THEME["font"],
+                bg=THEME["bg_color"],
+                fg=THEME["fg_color"],
+            ).grid(row=0, column=i * 2, padx=2)
+
+            entry = tk.Entry(
+                self.coords_frame,
+                width=6,
+                font=THEME["font"],
+                bg=THEME["entry_bg"],
+                fg=THEME["entry_fg"],
+                insertbackground=THEME["fg_color"],
+            )
+            entry.grid(row=0, column=i * 2 + 1, padx=2)
+            self.coord_entries[label] = entry
+            entry.bind("<Return>", self.update_selection_from_entries)
+            entry.bind("<FocusOut>", self.update_selection_from_entries)
+
+        # Add update button
+        self.update_button = tk.Button(
+            self.coords_frame,
+            text="Update",
+            command=lambda: self.update_selection_from_entries(None),
+            font=THEME["font"],
+            bg=THEME["button_bg"],
+            fg=THEME["fg_color"],
+            activebackground=THEME["accent_color"],
+            activeforeground=THEME["fg_color"],
+            relief=tk.FLAT,
+        )
+        self.update_button.grid(row=0, column=8, padx=5)
+
         self.result = None
 
     def on_press(self, event):
@@ -99,6 +143,10 @@ class RegionCaptureUI:
         if self.rect_id:
             self.canvas.delete(self.rect_id)
 
+        # Clear entry fields
+        for entry in self.coord_entries.values():
+            entry.delete(0, tk.END)
+
     def on_drag(self, event):
         """Handle mouse drag event"""
         if self.rect_id:
@@ -109,9 +157,37 @@ class RegionCaptureUI:
             self.start_y,
             event.x,
             event.y,
-            outline=THEME["accent_color"],  # Updated to theme color
+            outline=THEME["accent_color"],
             width=2,
         )
+
+        # Calculate and display current coordinates
+        scale_x = self.original_image.shape[1] / self.scaled_width
+        scale_y = self.original_image.shape[0] / self.scaled_height
+
+        x1 = min(self.start_x, event.x)
+        y1 = min(self.start_y, event.y)
+        x2 = max(self.start_x, event.x)
+        y2 = max(self.start_y, event.y)
+
+        # Convert to original image coordinates
+        orig_x1 = int(x1 * scale_x)
+        orig_y1 = int(y1 * scale_y)
+        orig_x2 = int(x2 * scale_x)
+        orig_y2 = int(y2 * scale_y)
+
+        width = orig_x2 - orig_x1
+        height = orig_y2 - orig_y1
+
+        # Update entry fields
+        self.coord_entries["X:"].delete(0, tk.END)
+        self.coord_entries["X:"].insert(0, str(orig_x1))
+        self.coord_entries["Y:"].delete(0, tk.END)
+        self.coord_entries["Y:"].insert(0, str(orig_y1))
+        self.coord_entries["Width:"].delete(0, tk.END)
+        self.coord_entries["Width:"].insert(0, str(width))
+        self.coord_entries["Height:"].delete(0, tk.END)
+        self.coord_entries["Height:"].insert(0, str(height))
 
     def on_release(self, event):
         """Handle mouse release event"""
@@ -153,3 +229,42 @@ class RegionCaptureUI:
         """
         self.root.wait_window()
         return self.result
+
+    def update_selection_from_entries(self, event=None):
+        """Update the selection rectangle based on entry values"""
+        try:
+            # Get values from entries
+            x = int(self.coord_entries["X:"].get())
+            y = int(self.coord_entries["Y:"].get())
+            width = int(self.coord_entries["Width:"].get())
+            height = int(self.coord_entries["Height:"].get())
+
+            # Convert to canvas coordinates
+            scale_x = self.scaled_width / self.original_image.shape[1]
+            scale_y = self.scaled_height / self.original_image.shape[0]
+
+            canvas_x = int(x * scale_x)
+            canvas_y = int(y * scale_y)
+            canvas_width = int(width * scale_x)
+            canvas_height = int(height * scale_y)
+
+            # Update rectangle
+            if self.rect_id:
+                self.canvas.delete(self.rect_id)
+
+            self.rect_id = self.canvas.create_rectangle(
+                canvas_x,
+                canvas_y,
+                canvas_x + canvas_width,
+                canvas_y + canvas_height,
+                outline=THEME["accent_color"],
+                width=2,
+            )
+
+            # Update selection
+            self.selected_region = (x, y, width, height)
+            self.confirm_button.config(state=tk.NORMAL)
+
+        except ValueError:
+            # Invalid input - ignore
+            pass

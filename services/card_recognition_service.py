@@ -82,8 +82,6 @@ class CardRecognitionService:
             hand_state.append(card_info_with_position)
             x -= card_offset_mapping.get(number_of_cards, 20)
 
-        self.log_callback(f"Your hand contains: {', '.join(hand_cards)}")
-
     def identify_card(self, zoomed_card_image):
         highest_similarity = 0
         identified_card = None

@@ -64,15 +64,23 @@ class LogSection:
 
     def log_message(self, message):
         """Thread-safe logging method"""
-        if not self.bot_ui.root.winfo_exists():
+        if not self.bot_ui.root.winfo_exists() or not self.bot_ui.bot_running:
             return
 
         def _log():
-            if not self.bot_ui.root.winfo_exists():
+            if not self.bot_ui.root.winfo_exists() or not self.bot_ui.bot_running:
                 return
+
+            # Check if scrollbar is at the bottom before inserting text
+            was_at_bottom = self.log_text.yview()[1] == 1.0
+
             self.log_text.config(state=tk.NORMAL)
             self.log_text.insert(tk.END, message + "\n")
-            self.log_text.see(tk.END)
+
+            # Only auto-scroll if we were already at the bottom
+            if was_at_bottom:
+                self.log_text.see(tk.END)
+
             self.log_text.config(state=tk.DISABLED)
 
         # Schedule the log update on the main thread

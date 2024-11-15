@@ -1,7 +1,10 @@
+# controllers/game_controller.py
 import threading
 import time
+import traceback
 
 from utils.adb_utils import click_position, drag_position, take_screenshot
+from utils.battle_log import BattleLog
 from utils.constants import bench_positions, card_offset_mapping, default_pokemon_stats
 
 card_effects = {
@@ -38,11 +41,19 @@ class GameController:
         self.turn_check_region = (50, 1560, 200, 20)
         self.center_x = 400
         self.center_y = 900
-        self.card_start_x = 520
-        self.card_y = 1485
+        self.card_start_x = 525
+        self.card_y = 1470
         self.number_of_cards_region = (790, 1325, 60, 50)
         self.debug_window = debug_window
         self.last_screenshot = None
+
+        # New flag to track turn state
+        self.is_new_turn = True  # Assume starting as a new turn
+
+        # Add battle_log initialization
+        self.battle_log = BattleLog(
+            log_callback, card_recognition_service, debug_window
+        )
 
     def start(self):
         if not self.app_state.program_path:
@@ -56,44 +67,55 @@ class GameController:
 
     def run(self):
         """Main bot loop"""
-        # Try to connect first
-        if not self.emulator_controller.connect_and_run():
-            self.log_callback("Failed to connect to any device. Stopping bot.")
-            self.running_event.clear()
-            return
+        try:
+            self.log_callback("🔄 Starting bot...")
 
-        while self.running_event.is_set():
-            try:
-                # Check if we're still connected
-                devices = self.emulator_controller.get_all_devices()
-                connected = False
-                for device in devices:
-                    if (
+            # Try to connect first
+            if not self.emulator_controller.connect_and_run():
+                self.log_callback("❌ Failed to connect to any device. Stopping bot.")
+                self.running_event.clear()
+                return
+
+            self.log_callback("✅ Connected successfully")
+
+            while self.running_event.is_set():
+                try:
+                    # Check connection status
+                    devices = self.emulator_controller.get_all_devices()
+                    connected = any(
                         device["id"] == self.app_state.emulator_name
                         and device["state"] == "device"
-                    ):
-                        connected = True
-                        break
-
-                if not connected:
-                    self.log_callback(
-                        "Lost connection to device. Attempting to reconnect..."
+                        for device in devices
                     )
-                    if not self.emulator_controller.connect_and_run():
-                        self.log_callback("Failed to reconnect. Stopping bot.")
-                        self.running_event.clear()
-                        return
 
-                # Normal bot operations
-                self.prepare_for_battle()
-                self.navigate_to_battle()
-                self.start_battle()
-                self.handle_battle()
-                self.end_battle()
+                    if not connected:
+                        self.log_callback(
+                            "⚠️ Lost connection to device. Attempting to reconnect..."
+                        )
+                        if not self.emulator_controller.connect_and_run():
+                            self.log_callback("❌ Failed to reconnect. Stopping bot.")
+                            self.running_event.clear()
+                            return
+                        self.log_callback("✅ Reconnected successfully")
 
-            except Exception as e:
-                self.log_callback(f"An error occurred: {e}")
-                time.sleep(5)  # Wait before retrying
+                    # Normal bot operations with status updates
+                    self.log_callback("🎮 Starting new battle sequence")
+                    self.prepare_for_battle()
+                    self.navigate_to_battle()
+                    self.start_battle()
+                    self.handle_battle()
+                    self.end_battle()
+                    self.log_callback("✅ Battle sequence completed")
+
+                except Exception as e:
+                    error_msg = f"⚠️ Error during battle sequence:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
+                    self.log_callback(error_msg)
+                    time.sleep(5)  # Wait before retrying
+
+        except Exception as e:
+            error_msg = f"❌ Critical error in bot loop:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
+            self.log_callback(error_msg)
+            self.running_event.clear()
 
     def prepare_for_battle(self):
         self.game_state.reset()
@@ -140,39 +162,64 @@ class GameController:
                     self.turn_check_region, self.running_event, self.game_state
                 )
             )
-            if not self.game_state.is_first_turn:
-                # Handle situations like defeated Pokémon or special cards
-                self.click_bench_positions()
-                self.check_active_pokemon()
-                self.reset_view()
+
+            self.check_active_pokemon()
+            self.reset_view()
 
             time.sleep(3)  # wait to draw the card if need
+
             if is_turn and self.game_state.active_pokemon:
-                self.update_game_state()
+                if self.is_new_turn:
+                    self.update_game_state()
+                    self.is_new_turn = False  # Reset the flag after updating
                 self.play_turn()
                 self.end_turn()
             elif is_turn:
-                self.update_game_state()
+                if self.is_new_turn:
+                    self.update_game_state()
+                    self.is_new_turn = False  # Reset the flag after updating
                 self.process_hand_cards()
                 time.sleep(1)
-                if self.game_state.is_first_turn:
-                    self.image_processor.check_and_click_until_found(
+                if (
+                    self.game_state.is_first_turn
+                    and self.image_processor.check_and_click_until_found(
                         self.template_images.get("START_BATTLE_BUTTON"),
                         "Start battle button",
                         self.running_event,
                         similarity_threshold=0.5,
                         max_attempts=10,
                     )
+                ):
                     self.game_state.first_turn_done = True
+                    self.is_new_turn = True
+                if self.game_state.active_pokemon:
+                    self.end_turn()
             else:
                 self.click_bench_positions()
+                self.is_new_turn = True
 
-            if self.game_state.go_first and self.game_state.first_turn_done:
+            if self.game_state.go_first and self.game_state.go_first_done:
                 self.game_state.go_first = False
                 self.log_callback("Played first!")
             else:
                 self.log_callback("Waiting for opponent's turn...")
                 time.sleep(1)
+
+            # Detect new cards drawn (e.g., after end of turn)
+            # if self.detect_new_cards():
+            # self.update_game_state()
+
+    def detect_new_cards(self):
+        """
+        Detects if new cards have been drawn by comparing the current number of cards
+        with the expected number. Returns True if new cards are detected.
+        """
+        current_number = self.battle_controller.check_number_of_cards(500, 1500)
+        if current_number and self.game_state.number_of_cards:
+            if int(current_number) > self.game_state.number_of_cards:
+                self.log_callback("New cards detected. Updating game state...")
+                return True
+        return False
 
     # Update methods to check self.running_event.is_set()
     def update_game_state(self, cards_delta=0):
@@ -181,158 +228,171 @@ class GameController:
         self.reset_view()
         self.check_number_of_cards(cards_delta)
         self.reset_view()
-        if self.game_state.number_of_cards and self.game_state.number_of_cards > 0:
-            self.card_recognition_service.check_cards(
-                self.game_state.number_of_cards,
-                self.card_start_x,
-                self.card_y,
-                self.game_state.hand_state,
-                False,
-            )
-        else:
-            self.game_state.hand_state = []
+        # self.check_active_pokemon()
+        self.reset_view()
+        if cards_delta == 0:
+            if self.game_state.number_of_cards and self.game_state.number_of_cards > 0:
+                self.log_callback("🔍 Scanning cards...")
+                self.card_recognition_service.check_cards(
+                    self.game_state.number_of_cards,
+                    self.card_start_x,
+                    self.card_y,
+                    self.game_state.hand_state,
+                    False,
+                )
+            else:
+                self.game_state.hand_state = []
 
     def play_turn(self):
         if not self.running_event.is_set():
             return
-        self.log_callback("Start playing my turn...")
+        self.log_callback("🎮 Starting turn...")
 
         if not self.game_state.is_first_turn:
             self.add_energy_to_pokemon()
+        self.check_bench_cards()
+        self.check_active_pokemon()
 
         if 0 < len(self.game_state.hand_state):
-            self.log_callback("Hand state:")
-            for card in self.game_state.hand_state:
-                self.log_callback(f"{card['name']}")
-            self.check_bench_cards()
-            # Add bench state logging here
-            self.log_callback("\nBench state:")
-            for slot, pokemon in self.game_state.bench_pokemon.items():
-                if pokemon:
-                    self.log_callback(
-                        f"Slot {slot}: {pokemon['name']} (Energy: {pokemon['energies']})"
-                    )
-                else:
-                    self.log_callback(f"Slot {slot}: Empty")
+            # self.log_callback("📋 Current hand:")
+            # for card in self.game_state.hand_state:
+            #     self.log_callback(f"  • {card['name']}")
 
-            time.sleep(1)
+            # self.log_callback("\n🪑 Bench status:")
+            # for slot, pokemon in self.game_state.bench_pokemon.items():
+            #     if pokemon:
+            #         self.log_callback(
+            #             f"  [{slot}] {pokemon['name']} (⚡ {pokemon['energies']})"
+            #         )
+            #     else:
+            #         self.log_callback(f"  [{slot}] Empty")
+            self.reset_view()
             self.process_hand_cards()
-            time.sleep(1)
-            self.reset_view()
-        else:
-            self.reset_view()
-            self.add_energy_to_pokemon()
-            self.try_attack()
 
-    def process_hand_cards(self, recursion_level=0, processed_cards=None):
+    def process_hand_cards(self):
         if not self.running_event.is_set():
             return
 
-        # Initialize processed_cards set on first call
-        if processed_cards is None:
-            processed_cards = set()
-
-        # Prevent infinite recursion
-        if recursion_level >= 10:
-            self.log_callback("Maximum card processing depth reached")
-            return
-
-        # Turn check before processing cards
-        is_turn, _, _ = self.battle_controller.check_turn(
-            self.turn_check_region, self.running_event, self.game_state
-        )
-        if not is_turn:
-            self.log_callback("Turn ended while processing cards, stopping...")
-            return
-
-        card_offset_x = card_offset_mapping.get(self.game_state.number_of_cards, 20)
-        hand_changed = False
-
-        # Create unique card identifiers based on name, id, and position
-        current_hand_cards = {
-            (card["name"], card["info"]["id"], card["position"])
-            for card in self.game_state.hand_state
-        }
-
-        for card in self.game_state.hand_state:
-            if not self.running_event.is_set():
+        if not self.game_state.number_of_cards:
+            self.check_number_of_cards()
+            if not self.game_state.number_of_cards:
+                self.log_callback("⚠️ Could not determine number of cards in hand")
                 return
 
-            # Create unique identifier for current card
-            card_identifier = (card["name"], card["info"]["id"], card["position"])
+        self.reset_view()
 
-            # Skip if card was already processed or failed
-            if (
-                card_identifier in processed_cards
-                or card in self.game_state.failed_cards
-            ):
-                continue
+        # Initial scan of all cards in hand
+        if len(self.game_state.hand_state) == 0:
+            self.update_game_state()
 
-            card_delta = 0
+        cards_played = 0
+        max_cards_per_turn = 5  # Safety limit
 
-            if self.game_state.is_first_turn and card["info"].get("item_card"):
-                continue
+        while cards_played < max_cards_per_turn and self.game_state.hand_state:
+            cards_to_play = []
+            current_hand = self.game_state.hand_state[:]
+            cards_played_this_iteration = 0
 
-            if (
-                card["info"].get("item_card")
-                and self.game_state.played_trainer_cards >= 2
-            ):
-                continue
+            # First, identify all playable cards
+            for card in current_hand:
+                if card in self.game_state.failed_cards:
+                    continue
 
-            start_x = self.card_start_x - (card["position"] * card_offset_x)
+                if self.game_state.is_first_turn and card["info"].get("item_card"):
+                    continue
 
-            # Try to play the card based on its type
-            if card["info"].get("item_card"):
-                played, this_card_delta = self.play_trainer_card(card, start_x)
-                if played:
-                    card_delta += this_card_delta
-                    card_delta -= 1
-                    hand_changed = True
-                    processed_cards.add(card_identifier)
-                    break
-            elif self.can_set_active_pokemon(card):
-                if self.set_active_pokemon(card, start_x):
-                    hand_changed = True
-                    card_delta -= 1
-                    processed_cards.add(card_identifier)
-                    break
-            elif self.can_place_on_bench(card):
-                if self.place_pokemon_on_bench(card, start_x):
-                    hand_changed = True
-                    card_delta -= 1
-                    processed_cards.add(card_identifier)
-                    break
-            elif self.can_evolve_pokemon(card):
-                if self.evolve_pokemon(card, start_x):
-                    hand_changed = True
-                    card_delta -= 1
-                    processed_cards.add(card_identifier)
-                    break
+                if (
+                    card["info"].get("item_card")
+                    and self.game_state.played_trainer_cards >= 2
+                ):
+                    continue
 
-            self.reset_view()
+                can_play = False
+                if card["info"].get("item_card"):
+                    can_play = True
+                elif self.can_set_active_pokemon(card):
+                    can_play = True
+                elif self.can_place_on_bench(card):
+                    can_play = True
+                elif self.can_evolve_pokemon(card):
+                    can_play = True
 
-        if hand_changed:
-            self.reset_view()
-            self.update_game_state(cards_delta=card_delta)
-            # Only recurse if we still have cards to process
-            if self.game_state.hand_state:
-                # Get new hand state after playing cards
-                new_hand_cards = {
-                    (card["name"], card["info"]["id"], card["position"])
-                    for card in self.game_state.hand_state
-                }
-                # Only process cards that weren't in the previous hand
-                unprocessed_cards = new_hand_cards - current_hand_cards
-                if unprocessed_cards:
-                    self.process_hand_cards(recursion_level + 1, processed_cards)
+                if can_play:
+                    cards_to_play.append(card)
 
-        if recursion_level == 0:
-            self.game_state.played_trainer_cards = 0
-            self.game_state.failed_cards = []
+            if not cards_to_play:
+                break
+
+            # Now try to play each identified card
+            played_any = False
+            for card in cards_to_play:
+                if not self.running_event.is_set():
+                    return
+
+                card_offset_x = card_offset_mapping.get(
+                    len(self.game_state.hand_state), 20
+                )
+                start_x = self.card_start_x - (card["position"] * card_offset_x)
+
+                action_taken = False
+                delta = 0
+
+                # Try to play the card
+                if card["info"].get("item_card"):
+                    played, this_delta = self.play_trainer_card(card, start_x)
+                    delta += this_delta
+                    if played:
+                        self.game_state.played_trainer_cards += 1
+                        self.remove_card_from_hand(card)
+                        action_taken = True
+                elif self.can_set_active_pokemon(card):
+                    if self.set_active_pokemon(card, start_x):
+                        self.remove_card_from_hand(card)
+                        action_taken = True
+                elif self.can_place_on_bench(card):
+                    if self.place_pokemon_on_bench(card, start_x):
+                        self.remove_card_from_hand(card)
+                        action_taken = True
+                elif self.can_evolve_pokemon(card):
+                    if self.evolve_pokemon(card, start_x):
+                        self.remove_card_from_hand(card)
+                        action_taken = True
+
+                if action_taken:
+                    played_any = True
+                    cards_played += 1
+                    cards_played_this_iteration += 1
+                    # Update positions for remaining cards
+                    for i, remaining_card in enumerate(self.game_state.hand_state):
+                        remaining_card["position"] = i
+                    self.reset_view()
+                    time.sleep(1)
+
+            if not played_any:
+                break
+
+            delta -= cards_played_this_iteration
+            # Scan for any new cards that might have been drawn
+            if self.detect_new_cards() or delta != 0:
+                self.update_game_state(delta)
+
+        # Reset counters after processing all cards
+        self.game_state.played_trainer_cards = 0
+        self.game_state.failed_cards = []
+
+    def remove_card_from_hand(self, card):
+        """
+        Removes a card from the hand_state manually after it has been played.
+        """
+        try:
+            self.game_state.hand_state.remove(card)
+            self.log_callback(f"Removed card {card['name']} from hand manually.")
+        except ValueError:
+            self.log_callback(f"Card {card['name']} not found in hand to remove.")
 
     def verify_card_play(self, card, action_func):
         """
-        Verifies if a card with the same name was successfully played.
+        Verifies if a card was successfully played by checking the battle log.
 
         Args:
             card: The card being played
@@ -341,77 +401,43 @@ class GameController:
         Returns:
             bool: True if the card was successfully played, False otherwise
         """
-        # Step 1: Get initial positions of identical cards in hand
-        card_name = card["name"]
-        played_card_id = card["info"]["id"]
-
-        initial_positions = [
-            card_info["position"]
-            for card_info in self.game_state.hand_state
-            if card_info["name"] == card_name
-        ]
-
         # Perform the card play action
         action_func()
-        time.sleep(3)  # Wait for animation to complete
-
-        # Step 2: Calculate expected new position(s) of identical card(s) after play
-        remaining_positions = [
-            pos for pos in initial_positions if pos != card["position"]
-        ]
-        for initial_position in initial_positions:
-            new_card_id, _ = self.card_recognition_service.check_specific_card(
-                initial_position,
-                self.card_start_x,
-                self.card_y,
-                self.game_state.number_of_cards,
-            )
-
-            if new_card_id == played_card_id:
-                return False
-
-        if not remaining_positions:
-            # If no more cards with the same name should remain, the play was successful
-            self.log_callback(f"Played card {card['name']} successfully")
-            return True
-
-        # Step 3: Check nearby positions to confirm if a duplicate card moved
-
-        left_card_id, _ = self.card_recognition_service.check_specific_card(
-            remaining_positions[0] - 1,
-            self.card_start_x,
-            self.card_y,
-            self.game_state.number_of_cards - 1,
-        )
-        match_count = 0
-        if left_card_id and left_card_id == played_card_id:
-            match_count += 1
-        right_card_id, _ = self.card_recognition_service.check_specific_card(
-            remaining_positions[0] + 1,
-            self.card_start_x,
-            self.card_y,
-            self.game_state.number_of_cards - 1,
-        )
-        if right_card_id and right_card_id == played_card_id:
-            match_count += 1
-        center_card_id, _ = self.card_recognition_service.check_specific_card(
-            remaining_positions[0],
-            self.card_start_x,
-            self.card_y,
-            self.game_state.number_of_cards - 1,
-        )
-        if center_card_id and center_card_id == played_card_id:
-            match_count += 1
-
-        # Step 4: Verify if either nearby position contains the expected card ID
-        if match_count <= 1:
-            self.log_callback(f"Played card {card['name']} successfully")
-            return True  # The card was successfully played
-        else:
+        time.sleep(4)  # Wait for animation to complete
+        if not self.game_state.first_turn_done:
             self.log_callback(
-                f"Card {card['name']} is still in hand, play was unsuccessful"
+                "Skipping card play verification on first turn because dont have logs..."
             )
-            return False  # The card is still in hand, play was unsuccessful
+            return True
+        time.sleep(2)  # Need to really wait for some animations
+        # Check battle log for the action
+        action, card_info = self.battle_log.check_battle_log_action()
+
+        if action:
+            self.log_callback(f"Battle log detected action: {action}")
+            # If we got card info from battle log, verify it matches our played card
+            if card_info:
+                played_card_id = next(
+                    iter(card_info.keys())
+                )  # Get the first (and only) card ID
+                if played_card_id == card["info"]["id"]:
+                    self.log_callback(
+                        f"Verified {card['name']} was played successfully"
+                    )
+                    return True
+                else:
+                    self.log_callback(
+                        f"Battle log card ID mismatch: expected {card['info']['id']}, got {played_card_id}"
+                    )
+            else:
+                # If no card info but action detected, assume success
+                self.log_callback(
+                    f"Action detected but no card info, assuming {card['name']} was played successfully"
+                )
+                return True
+
+        self.log_callback(f"No battle log action detected for {card['name']}")
+        return False
 
     def play_trainer_card(self, card, start_x):
         self.log_callback(f"Playing trainer card: {card['name']}...")
@@ -622,14 +648,20 @@ class GameController:
         self.reset_view()
         time.sleep(0.35)
         screenshot = take_screenshot()
-        self.image_processor.check_and_click(
+        if not self.image_processor.check_and_click(
             screenshot, self.template_images["END_TURN"], "End turn"
-        )
-        time.sleep(0.35)
+        ):
+            self.log_callback("❌ End turn not found")
+            return
+        time.sleep(1.0)
+        screenshot = take_screenshot()
         self.image_processor.check_and_click(
             screenshot, self.template_images["OK"], "Ok"
         )
         self.game_state.is_first_turn = False  # Ensure we reset the first turn flag
+        self.game_state.go_first_done = True
+        # Mark that the next turn is a new turn
+        self.is_new_turn = True
 
     def end_battle(self):
         if not self.running_event.is_set():
@@ -667,6 +699,7 @@ class GameController:
         self.image_processor.check_and_click(
             screenshot, self.template_images["CROSS_BUTTON"], "Cross button"
         )
+        time.sleep(3)
 
     def is_battle_over(self, screenshot):
         return self.image_processor.check(
@@ -696,18 +729,31 @@ class GameController:
         )
 
     def check_number_of_cards(self, cards_delta=0):
-        if cards_delta != 0:
+        if not self.running_event.is_set():
+            return
+
+        # Handle the delta case first
+        if self.game_state.number_of_cards is not None and cards_delta != 0:
             self.game_state.number_of_cards += cards_delta
             self.log_callback(
                 f"Adjusted number of cards by delta: {cards_delta}, new total: {self.game_state.number_of_cards}"
             )
             return
-        if not self.running_event.is_set():
-            return
+
+        # Reset and check for new count
         self.game_state.number_of_cards = None
         n_cards = self.battle_controller.check_number_of_cards(500, 1500)
         if n_cards:
-            self.game_state.number_of_cards = int(n_cards)
+            try:
+                self.game_state.number_of_cards = int(n_cards)
+                self.log_callback(
+                    f"Updated number of cards: {self.game_state.number_of_cards}"
+                )
+            except (ValueError, TypeError):
+                self.log_callback("⚠️ Failed to parse number of cards")
+                self.game_state.number_of_cards = None
+        else:
+            self.log_callback("⚠️ Could not determine number of cards in hand")
 
     def reset_view(self):
         self.click(0, 1350, include_debug=False)
@@ -752,7 +798,7 @@ class GameController:
             self.click(bench_position[0], bench_position[1])
             self.reset_view()
         # Click active pokemon position
-        self.click(self.center_x, self.center_y)
+        # self.click(self.center_x, self.center_y)
         self.reset_view()
 
     def check_active_pokemon(self):
@@ -775,8 +821,8 @@ class GameController:
             }
             self.game_state.active_pokemon.append(card_info)
             self.log_callback(f"Active Pokémon: {card_info['name']}")
-        else:
-            self.game_state.active_pokemon = []
+        # else:
+        # self.game_state.active_pokemon = []
 
     def click(self, x, y, include_debug=True):
         """Wrapper for click_position with default debug parameters"""

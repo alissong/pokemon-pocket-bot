@@ -36,9 +36,9 @@ class EmulatorController:
                     return True
 
             except subprocess.TimeoutExpired:
-                self.log_callback("Waiting for device to become responsive...")
+                self.log_callback("⏳ Waiting for device...")
             except Exception as e:
-                self.log_callback(f"Error while waiting for device: {e}")
+                self.log_callback(f"❌ Device error: {e}")
 
             time.sleep(2)
 
@@ -87,7 +87,7 @@ class EmulatorController:
 
     def handle_offline_devices(self, device_ids):
         """Handle offline devices by killing ADB server and reconnecting"""
-        self.log_callback("Attempting to recover offline devices...")
+        self.log_callback("🔄 Recovering offline devices...")
         try:
             # Kill ADB server
             subprocess.run(["adb", "kill-server"], timeout=5)
@@ -104,7 +104,7 @@ class EmulatorController:
                 subprocess.run(["adb", "connect", device_id], timeout=5)
 
         except Exception as e:
-            self.log_callback(f"Error during offline device recovery: {e}")
+            self.log_callback(f"❌ Recovery failed: {e}")
 
     def connect_to_device(self, device_id):
         """Connect to a specific device by ID or IP:port"""

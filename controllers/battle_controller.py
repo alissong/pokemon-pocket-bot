@@ -15,7 +15,6 @@ class BattleController:
         is_your_turn = False
         is_first_turn = False
         go_first = False
-        self.log_callback("Checking turn...")
         if not running_event.is_set():
             return is_your_turn, is_first_turn, go_first
         screenshot1 = self.image_processor.capture_region(turn_check_region)
@@ -23,38 +22,33 @@ class BattleController:
         screenshot2 = self.image_processor.capture_region(turn_check_region)
 
         similarity = self.image_processor.calculate_similarity(screenshot1, screenshot2)
-        if similarity < 0.95:
-            self.log_callback(f"It's your turn! {similarity}")
+        if similarity < 0.958:
+            self.log_callback("🎮 Your turn!")
             is_your_turn = True
-        else:
-            self.log_callback(f"Not your turn! {similarity}")
+
         if not game_state.first_turn_done:
             screenshot = take_screenshot()
             go_first = self.image_processor.check(
                 screenshot,
                 self.template_images.get("GOING_FIRST_INDICATOR"),
-                "Going first log",
+                None,
                 0.7,
             )
             if (
-                self.image_processor.check_and_click(
-                    screenshot,
-                    self.template_images.get("START_BATTLE_BUTTON"),
-                    "Start battle button",
+                self.image_processor.check(
+                    screenshot, self.template_images.get("START_BATTLE_BUTTON"), None
                 )
                 or go_first
                 or self.image_processor.check(
                     screenshot,
                     self.template_images.get("GOING_SECOND_INDICATOR"),
-                    "Going second log",
+                    None,
                     0.7,
                 )
             ):
-                self.log_callback("First turn")
+                self.log_callback("🎲 First turn")
                 is_your_turn = True
                 is_first_turn = True
-            else:
-                self.log_callback("Waiting for opponent's turn...")
 
         return is_your_turn, is_first_turn, go_first
 
@@ -102,35 +96,33 @@ class BattleController:
     def check_rival_concede(self, screenshot, running_event):
         if not running_event.is_set():
             return
-        self.log_callback("Checking if the rival conceded...")
         if self.image_processor.check(
             screenshot,
             self.template_images.get("TAP_TO_PROCEED_BUTTON"),
-            "Rival conceded",
+            None,
         ):
+            self.log_callback("🏳️ Rival conceded!")
             for key in [
                 "NEXT_BUTTON",
                 "THANKS_BUTTON",
             ]:
                 if not self.image_processor.check_and_click_until_found(
                     self.template_images.get(key),
-                    f"{key.replace('_', ' ').title()}",
+                    None,
                     running_event,
                 ):
                     break
             time.sleep(2)
             self.image_processor.check_and_click_until_found(
-                self.template_images.get("CROSS_BUTTON"), "Cross button", running_event
+                self.template_images.get("CROSS_BUTTON"), None, running_event
             )
             time.sleep(4)
-        else:
-            self.log_callback("Rival hasn't conceded")
 
     def check_rival_afk(self, screenshot):
-        self.log_callback("Checking if the rival is AFK...")
         if self.image_processor.check_and_click(
-            screenshot, self.template_images.get("OK_BUTTON_AFK"), "OK Button AFK", 0.7
+            screenshot, self.template_images.get("OK_BUTTON_AFK"), "AFK ok button", 0.7
         ):
+            self.log_callback("💤 Rival is AFK")
             return True
         return False
 

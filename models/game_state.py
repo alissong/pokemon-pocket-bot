@@ -17,5 +17,6 @@ class GameState:
         self.is_first_turn = True
         self.first_turn_done = False
         self.go_first = False
+        self.go_first_done = False
         self.played_trainer_cards = 0
         self.failed_cards = []
