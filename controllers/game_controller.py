@@ -676,7 +676,7 @@ class GameController:
         ):
             time.sleep(2)
 
-        max_attempts = 2
+        max_attempts = 5
         for _ in range(max_attempts):
             if not self.running_event.is_set():
                 return
@@ -684,6 +684,7 @@ class GameController:
             if self.image_processor.check_and_click(
                 screenshot,
                 self.template_images["NEXT_BUTTON"],
+                "Checking next button",
             ):
                 time.sleep(2)
                 break
@@ -696,6 +697,7 @@ class GameController:
             if self.image_processor.check_and_click(
                 screenshot,
                 self.template_images["THANKS_BUTTON"],
+                "Checking thanks button",
             ):
                 time.sleep(3)
                 break
@@ -704,6 +706,7 @@ class GameController:
         self.image_processor.check_and_click(
             screenshot,
             self.template_images["CROSS_BUTTON"],
+            "Checking cross button",
         )
         time.sleep(3)
 
