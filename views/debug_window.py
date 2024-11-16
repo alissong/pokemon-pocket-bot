@@ -569,7 +569,19 @@ class DebugWindow:
 
     def _on_selection_change(self, event):
         """Handle selection changes in the listbox"""
-        self.selected_indices = set(self.action_listbox.curselection())
+        current_selection = set(self.action_listbox.curselection())
+        last_index = self.action_listbox.size() - 1
+
+        # Disable auto-follow if selection is not the last item
+        if current_selection and max(current_selection) < last_index:
+            self.auto_follow = False
+            self.auto_follow_var.set(False)
+        # Keep auto-follow enabled only if the last item remains selected
+        elif self.auto_follow and last_index not in current_selection:
+            self.auto_follow = False
+            self.auto_follow_var.set(False)
+
+        self.selected_indices = current_selection
         if len(self.selected_indices) == 1:
             # If single selection, show the image
             self.on_action_select(None)
