@@ -153,7 +153,7 @@ class DeviceConnectionDialog(BaseDialog):
 
         for device in devices:
             state_text = (
-                "✓ Connected" if device["state"] == "device" else "✗ Disconnected"
+                "✓ Available" if device["state"] == "device" else "✗ Unavailable"
             )
             is_current = (
                 " (Current)" if device["id"] == self.app_state.emulator_name else ""

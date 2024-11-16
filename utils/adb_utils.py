@@ -65,7 +65,7 @@ def take_screenshot(screenshot_object_receiver=None):
 
 
 def click_position(x, y, debug_window=None, screenshot=None):
-    if debug_window and debug_window.window is not None:
+    if debug_window and debug_window.window is not None and debug_window.is_open:
         if screenshot is None:
             screenshot = take_screenshot()
         action_coords = {"type": "click", "coords": (x, y)}
@@ -79,7 +79,7 @@ def find_subimage(screenshot, subimage):
     return max_loc, max_val
 
 
-def long_press_position(x, y, duration=1.0):
+def long_press_position(x, y, duration=1.0, debug_window=None, debug_message=None):
     screenshot = None
 
     def capture_screenshot_during_press():
@@ -90,6 +90,7 @@ def long_press_position(x, y, duration=1.0):
     screenshot_thread = Thread(target=capture_screenshot_during_press)
     screenshot_thread.start()
 
+    # Execute the long press
     subprocess.run(
         [
             "adb",
@@ -106,13 +107,20 @@ def long_press_position(x, y, duration=1.0):
 
     screenshot_thread.join()
 
+    # Log to debug window if available
+    if debug_window and debug_window.window is not None and debug_window.is_open:
+        action_coords = {"type": "long_press", "coords": (x, y)}
+        debug_window.log_action(
+            f"{debug_message or 'Long press'} at ({x}, {y})", screenshot, action_coords
+        )
+
     return screenshot
 
 
 def drag_position(start_pos, end_pos, duration=0.5, debug_window=None, screenshot=None):
     start_x, start_y = start_pos
     end_x, end_y = end_pos
-    if debug_window and debug_window.window is not None:
+    if debug_window and debug_window.window is not None and debug_window.is_open:
         if screenshot is None:
             screenshot = take_screenshot()
         action_coords = {"type": "drag", "coords": (start_x, start_y, end_x, end_y)}
@@ -198,7 +206,7 @@ def drag_first_y(start_pos, end_pos, duration=0.5, debug_window=None, screenshot
 
     points = [(x1, y1), (x2, y2), (x3, y3)]
     # Log the action if debug window is available
-    if debug_window and debug_window.window is not None:
+    if debug_window and debug_window.window is not None and debug_window.is_open:
         if screenshot is None:
             screenshot = take_screenshot()
         action_coords = {"type": "drag_first_y", "coords": points}

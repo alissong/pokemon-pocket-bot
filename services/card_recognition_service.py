@@ -24,6 +24,7 @@ class CardRecognitionService:
         self.image_processor = image_processor
         self.card_data_service = card_data_service
         self.ui_instance = ui_instance
+        self.debug_window = self.ui_instance.debug_window
         self.log_callback = log_callback
         self.deck_info = deck_info
         self.card_images = card_images
@@ -43,7 +44,17 @@ class CardRecognitionService:
 
         for i in range(number_of_cards):
             self.image_processor.reset_view()
-            zoomed_card_image = self.image_processor.get_card(x, card_y, 0.7)
+            # Get debug window from UI instance
+            debug_window = self.ui_instance.debug_window if self.ui_instance else None
+
+            # Pass debug window to get_card method
+            zoomed_card_image = self.image_processor.get_card(
+                x,
+                card_y,
+                0.7,
+                debug_window=debug_window,
+                debug_message=f"Getting card {i+1} of {number_of_cards}",
+            )
 
             if debug_images:
                 self.save_debug_image(zoomed_card_image)

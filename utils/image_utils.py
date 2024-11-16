@@ -16,14 +16,22 @@ class ImageProcessor:
         click_position(0, 1350)
         click_position(0, 1350)
 
-    def get_card(self, x, y, duration=1.0):
+    def get_card(self, x, y, duration=1.0, debug_window=None, debug_message=None):
         x_zoom_card_region, y_zoom_card_region, w, h = (80, 255, 740, 1020)
         from utils.adb_utils import long_press_position
 
-        return long_press_position(x, y, duration)[
+        # Get the screenshot with debug logging
+        screenshot = long_press_position(
+            x, y, duration, debug_window=debug_window, debug_message=debug_message
+        )
+
+        # Crop the relevant region
+        card_image = screenshot[
             y_zoom_card_region : y_zoom_card_region + h,
             x_zoom_card_region : x_zoom_card_region + w,
         ]
+
+        return card_image
 
     def calculate_similarity(self, img1, img2):
         # Check if either image is None or empty
