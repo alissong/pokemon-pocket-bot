@@ -32,7 +32,7 @@ class BattleLog:
         """
         # Click the card position in battle log
         click_position(BATTLE_LOG_CARD_POSITION[0], BATTLE_LOG_CARD_POSITION[1])
-        time.sleep(0.4)  # Wait for zoom animation
+        time.sleep(0.3)  # Wait for zoom animation
 
         # Capture the zoomed card region
         screenshot = take_screenshot()
@@ -136,7 +136,7 @@ class BattleLog:
             debug_window=self.debug_window,
             screenshot=self.last_screenshot,
         )
-        time.sleep(0.8)  # Wait for animation
+        time.sleep(0.4)  # Wait for animation
 
     def close_battle_log(self):
         """Closes the battle log by clicking twice on the close button"""

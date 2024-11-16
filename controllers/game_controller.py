@@ -179,7 +179,7 @@ class GameController:
                     self.update_game_state()
                     self.is_new_turn = False  # Reset the flag after updating
                 self.process_hand_cards()
-                time.sleep(1)
+                # time.sleep(1)
                 if (
                     self.game_state.is_first_turn
                     and self.image_processor.check_and_click_until_found(
@@ -251,8 +251,8 @@ class GameController:
 
         if not self.game_state.is_first_turn:
             self.add_energy_to_pokemon()
-        self.check_bench_cards()
         self.check_active_pokemon()
+        self.check_bench_cards()
 
         if 0 < len(self.game_state.hand_state):
             # self.log_callback("📋 Current hand:")
@@ -404,7 +404,7 @@ class GameController:
         """
         # Perform the card play action
         action_func()
-        time.sleep(4)  # Wait for animation to complete
+        time.sleep(2)  # Wait for animation to complete
         if not self.game_state.first_turn_done:
             self.log_callback(
                 "Skipping card play verification on first turn because dont have logs..."
@@ -412,6 +412,7 @@ class GameController:
             return True
         time.sleep(2)  # Need to really wait for some animations
         # Check battle log for the action
+        self.reset_view()
         action, card_info = self.battle_log.check_battle_log_action()
 
         if action:
@@ -446,7 +447,7 @@ class GameController:
 
         # Define the card play action
         def play_action():
-            time.sleep(1)
+            # time.sleep(1)
             self.drag_first_y((start_x, self.card_y), (self.center_x, self.center_y))
 
         # Attempt to play the card and verify success
@@ -474,7 +475,7 @@ class GameController:
         self.reset_view()
 
         def play_action():
-            time.sleep(0.7)
+            # time.sleep(0.7)
             self.drag((start_x, self.card_y), (self.center_x, self.center_y - 50))
 
         if self.verify_card_play(card, play_action):
@@ -517,12 +518,12 @@ class GameController:
         self.reset_view()
 
         def play_action():
-            time.sleep(1)
+            # time.sleep(1)
             self.log_callback(
                 f"Placing card {card['name']} on bench at position {empty_slot}..."
             )
             self.drag_first_y(
-                (start_x, self.card_y), (bench_position[0], bench_position[1]), 1.25
+                (start_x, self.card_y), (bench_position[0], bench_position[1])
             )
 
         if self.verify_card_play(card, play_action):
@@ -675,13 +676,14 @@ class GameController:
         ):
             time.sleep(2)
 
-        max_attempts = 5
+        max_attempts = 2
         for _ in range(max_attempts):
             if not self.running_event.is_set():
                 return
             screenshot = take_screenshot()
             if self.image_processor.check_and_click(
-                screenshot, self.template_images["NEXT_BUTTON"], "Next button"
+                screenshot,
+                self.template_images["NEXT_BUTTON"],
             ):
                 time.sleep(2)
                 break
@@ -692,14 +694,16 @@ class GameController:
                 return
             screenshot = take_screenshot()
             if self.image_processor.check_and_click(
-                screenshot, self.template_images["THANKS_BUTTON"], "Thanks button"
+                screenshot,
+                self.template_images["THANKS_BUTTON"],
             ):
                 time.sleep(3)
                 break
             time.sleep(1)
 
         self.image_processor.check_and_click(
-            screenshot, self.template_images["CROSS_BUTTON"], "Cross button"
+            screenshot,
+            self.template_images["CROSS_BUTTON"],
         )
         time.sleep(3)
 
@@ -767,6 +771,8 @@ class GameController:
             return
         self.log_callback("Checking bench cards...")
         for slot_idx, bench_position in enumerate(bench_positions):
+            self.reset_view()
+            time.sleep(0.5)
             self.click(bench_position[0], bench_position[1])
             zoomed_card_image = self.battle_controller.get_card(
                 bench_position[0], bench_position[1], 0.7
@@ -786,11 +792,10 @@ class GameController:
                     "energies": current_energies,
                 }
                 self.log_callback(f"Bench Pokemon {slot_idx}: {card_info['name']}")
-                time.sleep(0.25)
+                time.sleep(0.35)
             else:
                 self.game_state.bench_pokemon[slot_idx] = None
             self.reset_view()
-            time.sleep(0.5)
 
     def click_bench_positions(self):
         """Simply clicks all bench positions and active pokemon spot without checking cards"""
