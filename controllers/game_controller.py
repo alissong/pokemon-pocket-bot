@@ -247,6 +247,7 @@ class GameController:
         if not self.running_event.is_set():
             return
         self.log_callback("🎮 Starting turn...")
+        time.sleep(1)
 
         if not self.game_state.is_first_turn:
             self.add_energy_to_pokemon()
@@ -477,6 +478,7 @@ class GameController:
             self.drag((start_x, self.card_y), (self.center_x, self.center_y - 50))
 
         if self.verify_card_play(card, play_action):
+            self.game_state.active_pokemon.clear()
             self.game_state.active_pokemon.append(card)
             time.sleep(1)
             self.log_callback("Battle Start!")
@@ -784,9 +786,11 @@ class GameController:
                     "energies": current_energies,
                 }
                 self.log_callback(f"Bench Pokemon {slot_idx}: {card_info['name']}")
+                time.sleep(0.25)
             else:
                 self.game_state.bench_pokemon[slot_idx] = None
             self.reset_view()
+            time.sleep(0.5)
 
     def click_bench_positions(self):
         """Simply clicks all bench positions and active pokemon spot without checking cards"""
