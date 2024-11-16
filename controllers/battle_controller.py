@@ -108,11 +108,11 @@ class BattleController:
             ]:
                 if not self.image_processor.check_and_click_until_found(
                     self.template_images.get(key),
-                    None,
+                    f"Checking {key}",
                     running_event,
                 ):
                     break
-            time.sleep(2)
+                time.sleep(2)
             self.image_processor.check_and_click_until_found(
                 self.template_images.get("CROSS_BUTTON"), None, running_event
             )

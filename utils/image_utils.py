@@ -141,7 +141,7 @@ class ImageProcessor:
                 time.sleep(0.5)
 
     def check_and_click(
-        self, screenshot, template_image, log_message, similarity_threshold=0.8
+        self, screenshot, template_image, log_message=None, similarity_threshold=0.8
     ):
         if screenshot is None:
             self.log_callback("Screenshot is None in check_and_click")
