@@ -64,6 +64,7 @@ class BotUI:
         # Update window size
         self.root.geometry(f"{WINDOW_CONFIG['width']}x{WINDOW_CONFIG['height']}")
         self.root.configure(bg=UI_COLORS["bg"])
+        self.root.title("Pokemon Pocket Bot")
 
         # Setup menu
         MenuBuilder(self).build()
