@@ -9,7 +9,7 @@
     "python.formatting.provider": "ruff",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
-        "source.fixAll.ruff": true,
-        "source.organizeImports": true
+        "source.fixAll.ruff": "explicit",
+        "source.organizeImports": "explicit"
     }
 }
