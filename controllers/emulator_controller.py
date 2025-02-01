@@ -107,7 +107,6 @@ class EmulatorController:
             self.log_callback(f"❌ Recovery failed: {e}")
 
     def connect_to_device(self, device_id):
-        """Connect to a specific device by ID or IP:port"""
         try:
             # Check if device is already connected
             devices = self.get_all_devices()

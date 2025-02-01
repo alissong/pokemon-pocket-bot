@@ -15,28 +15,34 @@ class CardDataService:
         self.load_card_data()
 
     def load_card_data(self):
-        if os.path.exists(self.CACHE_FILE):
-            with open(self.CACHE_FILE) as f:
-                self.card_data = json.load(f)
-                print(f"Number of cards loaded from cache: {len(self.card_data)}")
-        else:
-            self.fetch_and_cache_card_data()
+        try:
+            if os.path.exists(self.CACHE_FILE):
+                with open(self.CACHE_FILE) as f:
+                    self.card_data = json.load(f)
+                    print(f"Number of cards loaded from cache: {len(self.card_data)}")
+            else:
+                self.fetch_and_cache_card_data()
+        except Exception as e:
+            print(f"Error loading card data: {e}")
 
     def fetch_and_cache_card_data(self):
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        response = requests.get(self.API_URL, headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            print(f"Number of cards received: {len(data['data'])}")
-            self.process_card_data(data)
-            with open(self.CACHE_FILE, "w") as f:
-                json.dump(self.card_data, f)
-        else:
-            print(f"Failed to fetch card data. Status code: {response.status_code}")
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            response = requests.get(self.API_URL, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"Number of cards received: {len(data['data'])}")
+                self.process_card_data(data)
+                with open(self.CACHE_FILE, "w") as f:
+                    json.dump(self.card_data, f)
+            else:
+                print(f"Failed to fetch card data. Status code: {response.status_code}")
+        except Exception as e:
+            print(f"Error fetching card data: {e}")
 
     def process_card_data(self, data):
         names = data["names"]
@@ -58,3 +64,15 @@ class CardDataService:
 
     def get_card_image_url(self, card_id):
         return f"https://static.dotgg.gg/pokepocket/card/{card_id}.webp"
+
+    def load_deck(self, deck_file):
+        try:
+            with open(deck_file) as f:
+                deck = json.load(f)
+                self.deck = {card['id']: card for card in deck}
+                print(f"Loaded {len(self.deck)} cards from deck")
+        except Exception as e:
+            print(f"Error loading deck: {e}")
+
+    def get_deck(self):
+        return self.deck

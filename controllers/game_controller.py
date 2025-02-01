@@ -80,42 +80,52 @@ class GameController:
 
             while self.running_event.is_set():
                 try:
-                    # Check connection status
-                    devices = self.emulator_controller.get_all_devices()
-                    connected = any(
-                        device["id"] == self.app_state.emulator_name
-                        and device["state"] == "device"
-                        for device in devices
-                    )
+                    if not self.check_connection():
+                        continue
 
-                    if not connected:
-                        self.log_callback(
-                            "⚠️ Lost connection to device. Attempting to reconnect..."
-                        )
-                        if not self.emulator_controller.connect_and_run():
-                            self.log_callback("❌ Failed to reconnect. Stopping bot.")
-                            self.running_event.clear()
-                            return
-                        self.log_callback("✅ Reconnected successfully")
-
-                    # Normal bot operations with status updates
                     self.log_callback("🎮 Starting new battle sequence")
-                    self.prepare_for_battle()
-                    self.navigate_to_battle()
-                    self.start_battle()
-                    self.handle_battle()
-                    self.end_battle()
+                    self.execute_battle_sequence()
                     self.log_callback("✅ Battle sequence completed")
 
                 except Exception as e:
-                    error_msg = f"⚠️ Error during battle sequence:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
-                    self.log_callback(error_msg)
-                    time.sleep(5)  # Wait before retrying
+                    self.handle_battle_error(e)
 
         except Exception as e:
-            error_msg = f"❌ Critical error in bot loop:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
-            self.log_callback(error_msg)
-            self.running_event.clear()
+            self.handle_critical_error(e)
+
+    def check_connection(self):
+        devices = self.emulator_controller.get_all_devices()
+        connected = any(
+            device["id"] == self.app_state.emulator_name
+            and device["state"] == "device"
+        for device in devices
+        )
+
+        if not connected:
+            self.log_callback("⚠️ Lost connection to device. Attempting to reconnect...")
+            if not self.emulator_controller.connect_and_run():
+                self.log_callback("❌ Failed to reconnect. Stopping bot.")
+                self.running_event.clear()
+                return False
+            self.log_callback("✅ Reconnected successfully")
+        return True
+
+    def execute_battle_sequence(self):
+        self.prepare_for_battle()
+        self.navigate_to_battle()
+        self.start_battle()
+        self.handle_battle()
+        self.end_battle()
+
+    def handle_battle_error(self, e):
+        error_msg = f"⚠️ Error during battle sequence:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
+        self.log_callback(error_msg)
+        time.sleep(5)  # Wait before retrying
+
+    def handle_critical_error(self, e):
+        error_msg = f"❌ Critical error in bot loop:\n{e!s}\n\nTraceback:\n{''.join(traceback.format_exc())}"
+        self.log_callback(error_msg)
+        self.running_event.clear()
 
     def prepare_for_battle(self):
         self.game_state.reset()
@@ -866,3 +876,18 @@ class GameController:
         drag_position(
             start_pos, end_pos, duration, self.debug_window, self.last_screenshot
         )
+
+    def read_hand_cards(self):
+        self.reset_view()
+        self.update_game_state()
+        return self.game_state.hand_state
+
+    def read_bench_pokemon(self):
+        self.reset_view()
+        self.check_bench_cards()
+        return self.game_state.bench_pokemon
+
+    def read_active_pokemon(self):
+        self.reset_view()
+        self.check_active_pokemon()
+        return self.game_state.active_pokemon

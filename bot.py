@@ -10,6 +10,7 @@ from services.card_data_service import CardDataService
 from services.card_recognition_service import CardRecognitionService
 from utils.image_utils import ImageProcessor
 from utils.loaders import load_all_cards, load_template_images
+from ai.decision_maker import DecisionMaker
 
 
 class PokemonBot:
@@ -65,6 +66,8 @@ class PokemonBot:
                 self.debug_window,
             )
 
+            self.decision_maker = DecisionMaker(self.game_controller)
+
             self.log_callback("✅ Bot initialization complete")
 
         except Exception as e:
@@ -73,6 +76,7 @@ class PokemonBot:
 
     def start(self):
         self.game_controller.start()
+        self.decision_maker.make_decision()
 
     def stop(self):
         self.game_controller.stop()
